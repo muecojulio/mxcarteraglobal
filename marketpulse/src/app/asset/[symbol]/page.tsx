@@ -10,6 +10,7 @@ import { Sparkline, IncomeChart, fmtPct } from "@/components/asset/AssetCharts";
 import { TaxSharesPanel } from "@/components/asset/TaxSharesPanel";
 import { AssetAnalysts } from "@/components/asset/AssetAnalysts";
 import { AssetCandles } from "@/components/asset/AssetCandles";
+import { FibraMetrics } from "@/components/asset/FibraMetrics";
 
 const RANGES = ["1d", "5d", "1mo", "6mo", "1y", "5y"] as const;
 type Candle = { t: number; o: number; h: number; l: number; c: number };
@@ -20,11 +21,10 @@ type AssetPayload = {
   stats: Record<string, number | null | undefined>;
   finance: { roe?: number | null; debtEquity?: number | null; income: Array<{ year: string; revenue: number; netIncome: number; margin: number }> };
   recommendation: { strongBuy: number; buy: number; hold: number; sell: number; strongSell: number } | null;
-  priceTarget?: { consensus: number | null; median: number | null; high: number | null; low: number | null; lastQuarterAvg?: number | null; lastQuarterCount?: number | null } | null;
+  priceTarget?: { consensus: number | null; lastQuarterAvg?: number | null; high?: number | null; low?: number | null; lastQuarterCount?: number | null } | null;
   earnings?: Array<{ period: string; estimate: number | null; actual: number | null; surprisePercent: number | null }>;
   dividends: Array<{ date: string; amount: number }>;
 };
-
 export default function AssetPage() {
   const params = useParams<{ symbol: string }>();
   const router = useRouter();
@@ -89,6 +89,7 @@ export default function AssetPage() {
         {tab === "fiscal" && (
           <>
             {fibra ? <p className="text-xs text-muted">Fiscal {split.fiscal ?? "—"} / capital {split.capital ?? "—"}</p> : null}
+            <FibraMetrics symbol={symbol} price={quote?.price} dividends={data?.dividends || []} />
             <TaxSharesPanel symbol={symbol} lastDivAmount={lastDiv} price={quote?.price} priceCurrency={quote?.currency} usdMxn={fx?.usdMxn ?? null} />
           </>
         )}
