@@ -8,18 +8,20 @@ import { getFibraMeta, splitFibraDistribution } from "@/lib/fibra-meta";
 import { isSicSymbol } from "@/lib/sic-catalog";
 import { Sparkline, IncomeChart, fmtPct } from "@/components/asset/AssetCharts";
 import { TaxSharesPanel } from "@/components/asset/TaxSharesPanel";
+import { AssetTargets } from "@/components/asset/AssetTargets";
 
 const RANGES = ["1d", "5d", "1mo", "6mo", "1y", "5y"] as const;
 type Candle = { t: number; o: number; h: number; l: number; c: number };
 type AssetPayload = {
-  quote: { symbol: string; name: string; price: number; changePercent: number; currency: string; change?: number } | null;
-  profile: { name?: string; exchange?: string } | null;
+  quote: { symbol: string; name: string; price: number; changePercent: number; currency: string } | null;
+  profile: { name?: string } | null;
   history: Candle[];
   stats: Record<string, number | null | undefined>;
   finance: { roe?: number | null; debtEquity?: number | null; income: Array<{ year: string; revenue: number; netIncome: number; margin: number }> };
   recommendation: { strongBuy: number; buy: number; hold: number; sell: number; strongSell: number } | null;
+  priceTarget?: { consensus: number | null; median: number | null; high: number | null; low: number | null } | null;
+  earnings?: Array<{ period: string; estimate: number | null; actual: number | null; surprisePercent: number | null }>;
   dividends: Array<{ date: string; amount: number }>;
-  assetType?: string;
 };
 
 export default function AssetPage() {
@@ -49,12 +51,6 @@ export default function AssetPage() {
   const closes = useMemo(() => (data?.history || []).map((h) => h.c), [data]);
   const chartTimes = useMemo(() => (data?.history || []).map((h) => h.t), [data]);
   const chartPositive = closes.length >= 2 ? closes[closes.length - 1] >= closes[0] : (quote?.changePercent ?? 0) >= 0;
-  const buyPct = useMemo(() => {
-    const r = data?.recommendation;
-    if (!r) return null;
-    const total = r.strongBuy + r.buy + r.hold + r.sell + r.strongSell || 1;
-    return Math.round(((r.strongBuy + r.buy) / total) * 100);
-  }, [data]);
   const fibra = getFibraMeta(symbol);
   const lastDiv = data?.dividends?.[0]?.amount ?? 0;
   const split = splitFibraDistribution(lastDiv, fibra);
@@ -78,20 +74,19 @@ export default function AssetPage() {
         {quote ? <p className={(quote.changePercent ?? 0) >= 0 ? "text-success text-sm" : "text-danger text-sm"}>{fmtPct(quote.changePercent ?? 0)}</p> : null}
         <div className="flex flex-wrap gap-1">{RANGES.map((r) => <button key={r} type="button" className={range === r ? "ui-chip ui-chip-active" : "ui-chip"} onClick={() => setRange(r)}>{r}</button>)}</div>
         {spark.length > 1 ? <Sparkline data={spark} times={chartTimes} positive={chartPositive} formatValue={(n) => formatMxn(toMxn(n, quote?.currency || "USD", fx?.usdMxn ?? null))} /> : null}
-        {buyPct != null ? <p className="text-xs text-muted">Consenso compra {buyPct}%</p> : null}
         <div className="flex gap-2">{(["resumen", "divs", "fiscal"] as const).map((t) => <button key={t} type="button" className={tab === t ? "ui-chip ui-chip-active" : "ui-chip"} onClick={() => setTab(t)}>{t}</button>)}</div>
         {tab === "resumen" && (
           <div className="text-xs space-y-1">
-            <p>P/E {data?.stats?.pe ?? "—"} · PEG {data?.stats?.peg ?? "—"} · P/B {data?.stats?.pb ?? "—"} · P/S {data?.stats?.ps ?? "—"}</p>
-            <p>ROE {data?.finance?.roe ?? "—"} · D/E {data?.finance?.debtEquity ?? "—"} · 52w {data?.stats?.low52 ?? "—"}–{data?.stats?.high52 ?? "—"}</p>
+            <p>P/E {data?.stats?.pe ?? "—"} · PEG {data?.stats?.peg ?? "—"} · P/B {data?.stats?.pb ?? "—"}</p>
             <IncomeChart income={data?.finance?.income || []} />
+            <AssetTargets priceTarget={data?.priceTarget} earnings={data?.earnings} />
             <Link href="/analysis" className="text-primary">Análisis textual</Link>
           </div>
         )}
         {tab === "divs" && (data?.dividends || []).slice(0, 16).map((d, i) => <p key={i} className="text-xs">{d.date} · {d.amount}</p>)}
         {tab === "fiscal" && (
           <>
-            {fibra ? <p className="text-xs text-muted">Fiscal {split.fiscal ?? "—"} / capital {split.capital ?? "—"} · {fibra.focus}</p> : null}
+            {fibra ? <p className="text-xs text-muted">Fiscal {split.fiscal ?? "—"} / capital {split.capital ?? "—"}</p> : null}
             <TaxSharesPanel symbol={symbol} lastDivAmount={lastDiv} price={quote?.price} priceCurrency={quote?.currency} usdMxn={fx?.usdMxn ?? null} />
           </>
         )}
