@@ -1,60 +1,79 @@
 "use client";
-import { useEffect, useState } from "react";
-import Link from "next/link";
 import { PortfolioBackup } from "@/components/PortfolioBackup";
 import { CloudVaultPanel } from "@/components/CloudVaultPanel";
 import { TaxEstimator } from "@/components/TaxEstimator";
+import { useEffect, useState } from "react";
 import { isLockEnabled, setPin, disableLock, registerBiometric, setBioPreferred, isBioPreferred, canUseWebAuthn, lockNow, getRecoveryContacts } from "@/lib/app-lock";
 import { persistSummary } from "@/lib/persist";
 import { getStoredTheme, applyTheme, type ThemeMode } from "@/components/ThemeProvider";
-const THEME_OPTIONS: { key: ThemeMode; label: string }[] = [
-  { key: "system", label: "Sistema" }, { key: "light", label: "Claro" }, { key: "dark", label: "Oscuro" },
+
+const THEME_OPTIONS: { key: ThemeMode; label: string; desc: string }[] = [
+  { key: "system", label: "Sistema", desc: "Sigue el modo del iPhone / dispositivo" },
+  { key: "light", label: "Claro", desc: "Fondo claro siempre" },
+  { key: "dark", label: "Oscuro", desc: "Fondo oscuro siempre" },
 ];
+
 export default function SettingsPage() {
   const [theme, setTheme] = useState<ThemeMode>("system");
+  const [mounted, setMounted] = useState(false);
   const [lockOn, setLockOn] = useState(false);
   const [bioOn, setBioOn] = useState(false);
   const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
   const [lockMsg, setLockMsg] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [recovery, setRecovery] = useState("");
   useEffect(() => {
-    setTheme(getStoredTheme()); setLockOn(isLockEnabled()); setBioOn(isBioPreferred());
-    const c = getRecoveryContacts(); setEmail(c.email); setPhone(c.phone);
+    setTheme(getStoredTheme());
+    setLockOn(isLockEnabled());
+    setBioOn(isBioPreferred());
+    getRecoveryContacts();
+    setMounted(true);
   }, []);
-  const summary = persistSummary();
+  if (!mounted) return <div className="px-4 py-8 text-sm text-muted">Cargando…</div>;
   return (
     <div className="flex flex-col min-h-full">
       <header className="sticky top-0 z-40 bg-background/95 border-b border-border safe-top">
         <div className="flex items-center px-4 h-14 max-w-lg mx-auto"><h1 className="text-lg font-bold">Configuración</h1></div>
       </header>
-      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-4">
-        <section className="space-y-2">
-          <p className="text-xs font-semibold text-muted uppercase">Tema</p>
-          <div className="flex gap-2">{THEME_OPTIONS.map((o) => (
-            <button key={o.key} type="button" className={theme === o.key ? "ui-chip ui-chip-active" : "ui-chip"} onClick={() => { setTheme(o.key); applyTheme(o.key); }}>{o.label}</button>
+      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-6 pb-10">
+        <PortfolioBackup /><CloudVaultPanel /><TaxEstimator />
+        <section>
+          <h2 className="text-xs font-semibold text-muted uppercase mb-2">Apariencia</h2>
+          <div className="space-y-2">{THEME_OPTIONS.map((o) => (
+            <button key={o.key} type="button" className={`w-full text-left bg-card border rounded-xl p-3 ${theme === o.key ? "border-primary" : "border-border"}`} onClick={() => { setTheme(o.key); applyTheme(o.key); }}>
+              <p className="font-medium text-sm">{o.label}</p><p className="text-xs text-muted">{o.desc}</p>
+            </button>
           ))}</div>
         </section>
-        <section className="space-y-2">
-          <p className="text-xs font-semibold text-muted uppercase">Candado</p>
-          <input className="ui-input" type="password" placeholder="Nueva clave 4-12" value={newPin} onChange={(e) => setNewPin(e.target.value)} />
-          <button type="button" className="ui-btn ui-btn-primary w-full" onClick={async () => {
-            try { const r = await setPin(newPin, { email, phone }); setLockOn(true); setRecovery(r.recoveryCode); setLockMsg("Candado activo. Guarda el código."); }
-            catch (e) { setLockMsg(e instanceof Error ? e.message : "Error"); }
-          }}>Activar candado</button>
-          {lockOn && <button type="button" className="ui-btn w-full" onClick={() => { disableLock(); setLockOn(false); }}>Quitar candado</button>}
-          {canUseWebAuthn() && <button type="button" className="ui-btn w-full" onClick={async () => { const ok = await registerBiometric(); setBioOn(ok); setBioPreferred(ok); }}>Biometría {bioOn ? "on" : "off"}</button>}
-          {lockOn && <button type="button" className="ui-btn w-full" onClick={() => lockNow()}>Bloquear ahora</button>}
-          {recovery ? <p className="text-xs font-mono break-all">Recuperación: {recovery}</p> : null}
-          {lockMsg ? <p className="text-xs text-muted">{lockMsg}</p> : null}
+        <section>
+          <h2 className="text-xs font-semibold text-muted uppercase mb-2">Seguridad</h2>
+          <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+            <p className="text-xs text-muted">Al abrir la app pedirá tu clave. Opcional: Face ID / huella. Todo queda en este dispositivo.</p>
+            {!lockOn ? (
+              <>
+                <input className="ui-input" type="password" inputMode="numeric" maxLength={12} placeholder="Nueva clave (4–12)" value={newPin} onChange={(e) => setNewPin(e.target.value.replace(/\s/g, ""))} />
+                <input className="ui-input" type="password" inputMode="numeric" maxLength={12} placeholder="Confirmar" value={confirmPin} onChange={(e) => setConfirmPin(e.target.value.replace(/\s/g, ""))} />
+                <button type="button" className="ui-btn ui-btn-primary w-full" onClick={async () => {
+                  if (newPin.length < 4 || newPin !== confirmPin) { setLockMsg("La clave no coincide o es corta"); return; }
+                  await setPin(newPin); setLockOn(true); setLockMsg("Candado activado");
+                }}>Activar candado</button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="ui-btn w-full" onClick={() => lockNow()}>Bloquear ahora</button>
+                {canUseWebAuthn() ? <button type="button" className="ui-btn w-full" onClick={async () => { await registerBiometric(); setBioPreferred(true); setBioOn(true); }}>Registrar biometría</button> : null}
+                <p className="text-xs text-muted">Biometría {bioOn ? "preferida" : "apagada"}</p>
+                <button type="button" className="text-danger text-sm" onClick={() => { disableLock(); setLockOn(false); }}>Quitar candado</button>
+              </>
+            )}
+            {lockMsg ? <p className="text-xs text-muted">{lockMsg}</p> : null}
+          </div>
         </section>
-        <TaxEstimator />
-        <PortfolioBackup />
-        <CloudVaultPanel />
-        <section className="text-xs text-muted space-y-1">{summary.map((s) => <p key={s.key}>{s.label}: {String(s.items)}</p>)}</section>
-        <Link href="/install" className="ui-btn ui-btn-primary w-full">Instalar / QR</Link>
-        <Link href="/legal" className="block text-sm underline">Avisos legales</Link>
+        <section>
+          <h2 className="text-xs font-semibold text-muted uppercase mb-2">Datos en este dispositivo</h2>
+          <div className="bg-card rounded-xl border border-border p-4 space-y-1">
+            {persistSummary().map((row) => <p key={row.key} className="text-xs">{row.label}: {row.items}</p>)}
+          </div>
+        </section>
       </main>
     </div>
   );

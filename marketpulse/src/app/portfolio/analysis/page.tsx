@@ -1,20 +1,41 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { loadPositions, type Position } from "@/lib/persist";
 import { useQuotes } from "@/lib/market-data/client";
-import { useUsdMxn, toMxn, formatMxn } from "@/lib/fx";
+import { useUsdMxn, toDisplay } from "@/lib/fx";
+import { RebalanceSuggestions } from "@/components/RebalanceSuggestions";
+
+type Position = { id?: string; symbol: string; name?: string; quantity?: number; shares?: number; avgCost?: number; avgPrice?: number; region?: "MX" | "US"; currency?: "MXN" | "USD" };
+const POS_KEY = "marketpulse_positions";
+const GOAL_KEY = "marketpulse_goal";
+const PROJ_KEY = "marketpulse_projection";
+function loadPositions(): Position[] {
+  if (typeof window === "undefined") return [];
+  try { const raw = localStorage.getItem(POS_KEY); return raw ? JSON.parse(raw) : []; } catch { return []; }
+}
+function formatMoney(value: number, currency: string) {
+  return new Intl.NumberFormat("es-MX", { style: "currency", currency: currency === "USD" ? "USD" : "MXN" }).format(value);
+}
 export default function PortfolioAnalysisPage() {
   const [positions, setPositions] = useState<Position[]>([]);
-  useEffect(() => setPositions(loadPositions()), []);
-  const { data } = useQuotes(positions.map((p) => p.symbol), 60_000);
+  const [goal, setGoal] = useState(1_000_000);
   const { fx } = useUsdMxn();
-  const rows = useMemo(() => positions.map((p) => {
-    const q = data?.quotes.find((x) => x.symbol === p.symbol);
-    const val = toMxn((q?.price ?? p.avgPrice) * p.shares, p.currency, fx?.usdMxn ?? null);
-    return { ...p, val };
-  }), [positions, data, fx]);
-  const total = rows.reduce((a, r) => a + r.val, 0);
+  useEffect(() => {
+    setPositions(loadPositions());
+    try { const g = localStorage.getItem(GOAL_KEY); if (g) setGoal(Number(g) || 1_000_000); JSON.parse(localStorage.getItem(PROJ_KEY) || "{}"); } catch { /* */ }
+  }, []);
+  const symbols = useMemo(() => positions.map((p) => p.symbol), [positions]);
+  const { data } = useQuotes(symbols, 60_000);
+  const rate = fx?.usdMxn ?? 17.5;
+  const rows = positions.map((p) => {
+    const qty = Number(p.quantity ?? p.shares ?? 0);
+    const cost = Number(p.avgCost ?? p.avgPrice ?? 0);
+    const live = data?.quotes.find((q) => q.symbol.toUpperCase() === String(p.symbol).toUpperCase());
+    const price = live?.price ?? cost;
+    const currency = (p.currency || (String(p.symbol).endsWith(".MX") ? "MXN" : "USD")) as "MXN" | "USD";
+    return { symbol: p.symbol, value: toDisplay(qty * price, currency, "MXN", rate) };
+  });
+  const total = rows.reduce((s, r) => s + r.value, 0);
   return (
     <div className="flex flex-col min-h-full">
       <header className="sticky top-0 z-40 bg-background/95 border-b border-border safe-top">
@@ -24,14 +45,9 @@ export default function PortfolioAnalysisPage() {
         </div>
       </header>
       <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3">
-        <p className="text-sm">Valor estimado {formatMxn(total)}</p>
-        {rows.map((r) => (
-          <div key={r.id} className="bg-card border border-border rounded-xl p-3">
-            <p className="font-semibold text-sm">{r.symbol}</p>
-            <p className="text-xs text-muted">{total ? ((r.val / total) * 100).toFixed(1) : "0"}% · {formatMxn(r.val)}</p>
-          </div>
-        ))}
-        <p className="text-[11px] text-muted">Concentración orientativa. No ejecutamos órdenes.</p>
+        <p className="text-sm">Valor {formatMoney(total, "MXN")} · meta {formatMoney(goal, "MXN")}</p>
+        {rows.map((r) => <p key={r.symbol} className="text-xs bg-card border border-border rounded-xl p-3">{r.symbol} · {formatMoney(r.value, "MXN")}</p>)}
+        <RebalanceSuggestions />
       </main>
     </div>
   );
