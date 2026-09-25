@@ -21,11 +21,15 @@ export default function SettingsPage() {
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [lockMsg, setLockMsg] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [recoveryShown, setRecoveryShown] = useState("");
   useEffect(() => {
     setTheme(getStoredTheme());
     setLockOn(isLockEnabled());
     setBioOn(isBioPreferred());
-    getRecoveryContacts();
+    const c = getRecoveryContacts();
+    setEmail(c.email); setPhone(c.phone);
     setMounted(true);
   }, []);
   if (!mounted) return <div className="px-4 py-8 text-sm text-muted">Cargando…</div>;
@@ -51,20 +55,35 @@ export default function SettingsPage() {
             {!lockOn ? (
               <>
                 <input className="ui-input" type="password" inputMode="numeric" maxLength={12} placeholder="Nueva clave (4–12)" value={newPin} onChange={(e) => setNewPin(e.target.value.replace(/\s/g, ""))} />
-                <input className="ui-input" type="password" inputMode="numeric" maxLength={12} placeholder="Confirmar" value={confirmPin} onChange={(e) => setConfirmPin(e.target.value.replace(/\s/g, ""))} />
+                <input className="ui-input" type="password" inputMode="numeric" maxLength={12} placeholder="Confirmar clave" value={confirmPin} onChange={(e) => setConfirmPin(e.target.value.replace(/\s/g, ""))} />
+                <input className="ui-input" type="email" placeholder="Correo (opcional)" value={email} onChange={(e) => setEmail(e.target.value)} />
+                <input className="ui-input" type="tel" placeholder="Celular (opcional)" value={phone} onChange={(e) => setPhone(e.target.value)} />
                 <button type="button" className="ui-btn ui-btn-primary w-full" onClick={async () => {
-                  if (newPin.length < 4 || newPin !== confirmPin) { setLockMsg("La clave no coincide o es corta"); return; }
-                  await setPin(newPin); setLockOn(true); setLockMsg("Candado activado");
-                }}>Activar candado</button>
+                  setLockMsg(""); setRecoveryShown("");
+                  if (newPin.length < 4) { setLockMsg("Mínimo 4 caracteres"); return; }
+                  if (newPin !== confirmPin) { setLockMsg("Las claves no coinciden"); return; }
+                  try {
+                    const { recoveryCode } = await setPin(newPin, { email, phone });
+                    setLockOn(true); setNewPin(""); setConfirmPin(""); setRecoveryShown(recoveryCode);
+                    setLockMsg("Clave activada. Guarda el código de recuperación.");
+                  } catch (e) { setLockMsg(e instanceof Error ? e.message : "Error"); }
+                }}>Activar clave</button>
               </>
             ) : (
               <>
                 <button type="button" className="ui-btn w-full" onClick={() => lockNow()}>Bloquear ahora</button>
-                {canUseWebAuthn() ? <button type="button" className="ui-btn w-full" onClick={async () => { await registerBiometric(); setBioPreferred(true); setBioOn(true); }}>Registrar biometría</button> : null}
+                {canUseWebAuthn() ? <button type="button" className="ui-btn w-full" onClick={async () => { const ok = await registerBiometric(); if (ok) { setBioPreferred(true); setBioOn(true); } }}>Registrar biometría</button> : null}
                 <p className="text-xs text-muted">Biometría {bioOn ? "preferida" : "apagada"}</p>
-                <button type="button" className="text-danger text-sm" onClick={() => { disableLock(); setLockOn(false); }}>Quitar candado</button>
+                <button type="button" className="text-danger text-sm" onClick={() => { disableLock(); setLockOn(false); setRecoveryShown(""); }}>Quitar candado</button>
               </>
             )}
+            {recoveryShown ? (
+              <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-3 text-center space-y-2">
+                <p className="text-[10px] uppercase text-muted font-semibold">Código de recuperación (guárdalo ya)</p>
+                <p className="text-lg font-mono font-bold tracking-widest">{recoveryShown}</p>
+                <button type="button" className="text-xs text-primary font-medium" onClick={async () => { try { await navigator.clipboard.writeText(recoveryShown); setLockMsg("Código copiado."); } catch { setLockMsg("Copia el código a mano."); } }}>Copiar</button>
+              </div>
+            ) : null}
             {lockMsg ? <p className="text-xs text-muted">{lockMsg}</p> : null}
           </div>
         </section>
