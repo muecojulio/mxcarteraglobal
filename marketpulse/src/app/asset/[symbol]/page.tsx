@@ -8,7 +8,7 @@ import { getFibraMeta, splitFibraDistribution } from "@/lib/fibra-meta";
 import { isSicSymbol } from "@/lib/sic-catalog";
 import { Sparkline, IncomeChart, fmtPct } from "@/components/asset/AssetCharts";
 import { TaxSharesPanel } from "@/components/asset/TaxSharesPanel";
-import { AssetTargets } from "@/components/asset/AssetTargets";
+import { AssetAnalysts } from "@/components/asset/AssetAnalysts";
 import { AssetCandles } from "@/components/asset/AssetCandles";
 
 const RANGES = ["1d", "5d", "1mo", "6mo", "1y", "5y"] as const;
@@ -20,7 +20,7 @@ type AssetPayload = {
   stats: Record<string, number | null | undefined>;
   finance: { roe?: number | null; debtEquity?: number | null; income: Array<{ year: string; revenue: number; netIncome: number; margin: number }> };
   recommendation: { strongBuy: number; buy: number; hold: number; sell: number; strongSell: number } | null;
-  priceTarget?: { consensus: number | null; median: number | null; high: number | null; low: number | null } | null;
+  priceTarget?: { consensus: number | null; median: number | null; high: number | null; low: number | null; lastQuarterAvg?: number | null; lastQuarterCount?: number | null } | null;
   earnings?: Array<{ period: string; estimate: number | null; actual: number | null; surprisePercent: number | null }>;
   dividends: Array<{ date: string; amount: number }>;
 };
@@ -81,7 +81,7 @@ export default function AssetPage() {
           <div className="text-xs space-y-1">
             <p>P/E {data?.stats?.pe ?? "—"} · PEG {data?.stats?.peg ?? "—"} · P/B {data?.stats?.pb ?? "—"}</p>
             <IncomeChart income={data?.finance?.income || []} />
-            <AssetTargets priceTarget={data?.priceTarget} earnings={data?.earnings} />
+            <AssetAnalysts recommendation={data?.recommendation} priceTarget={data?.priceTarget} earnings={data?.earnings} price={quote?.price} />
             <Link href="/analysis" className="text-primary">Análisis textual</Link>
           </div>
         )}
