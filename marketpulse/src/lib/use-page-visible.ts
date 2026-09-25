@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 
 export function usePageVisible(): boolean {
   const [visible, setVisible] = useState(true);
-
   useEffect(() => {
     const read = () => {
       if (typeof document === "undefined") return true;
@@ -12,20 +11,14 @@ export function usePageVisible(): boolean {
     };
     setVisible(read());
     const onVis = () => setVisible(read());
-    const onFocus = () => setVisible(true);
-    const onBlur = () => setVisible(read());
     document.addEventListener("visibilitychange", onVis);
-    window.addEventListener("focus", onFocus);
+    window.addEventListener("focus", () => setVisible(true));
     window.addEventListener("pageshow", onVis);
-    window.addEventListener("blur", onBlur);
+    window.addEventListener("blur", () => setVisible(read()));
     return () => {
       document.removeEventListener("visibilitychange", onVis);
-      window.removeEventListener("focus", onFocus);
-      window.removeEventListener("pageshow", onVis);
-      window.removeEventListener("blur", onBlur);
     };
   }, []);
-
   return visible;
 }
 
