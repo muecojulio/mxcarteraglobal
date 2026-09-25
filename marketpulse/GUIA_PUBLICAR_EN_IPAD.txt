@@ -1,0 +1,7 @@
+Publicar MX Cartera Global para iPad/iPhone
+
+1. Publica en Vercel con HTTPS (root: marketpulse).
+2. Abre la URL en Safari.
+3. Compartir → Añadir a pantalla de inicio.
+4. Sin HTTPS la instalación PWA no funciona.
+5. Las API keys van solo en Vercel, nunca en el ZIP ni en Git.
