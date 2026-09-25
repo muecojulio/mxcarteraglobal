@@ -11,10 +11,9 @@ import { RebalanceSuggestions } from "@/components/RebalanceSuggestions";
 import { TaxEstimator } from "@/components/TaxEstimator";
 import { PortfolioBackup } from "@/components/PortfolioBackup";
 import { useToast } from "@/components/Toast";
-import { Sparkline } from "@/components/asset/AssetCharts";
+import { PortfolioPeriodChart } from "@/components/portfolio/PortfolioPeriodChart";
 
 type Position = { id: string; symbol: string; name: string; quantity: number; avgCost: number; region: "MX" | "US"; market: string; currency: "MXN" | "USD"; shares?: number };
-const RANGES = ["1s", "1m", "3m", "1a", "5a"] as const;
 function formatMoney(value: number, currency: string) {
   return new Intl.NumberFormat("es-MX", { style: "currency", currency: currency === "MXN" ? "MXN" : "USD" }).format(value);
 }
@@ -27,7 +26,6 @@ export default function PortfolioPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [filter, setFilter] = useState<"ALL" | "MX" | "US">("ALL");
   const [displayCurrency, setDisplayCurrency] = useState<"USD" | "MXN">("MXN");
-  const [chartRange, setChartRange] = useState<(typeof RANGES)[number]>("1s");
   const { fx } = useUsdMxn();
   const [form, setForm] = useState({ symbol: "", name: "", quantity: "", avgCost: "", region: "US" as "MX" | "US" });
   useEffect(() => {
@@ -60,7 +58,6 @@ export default function PortfolioPage() {
     totalCost += toDisplay(p.costBasis, cur, displayCurrency, usdMxn);
     totalPL += toDisplay(p.pl, cur, displayCurrency, usdMxn);
   });
-  const periodPoints = totalCost > 0 ? [totalCost, (totalCost + totalValue) / 2, totalValue] : [];
   return (
     <div className="flex flex-col min-h-full">
       <header className="sticky top-0 z-40 bg-background/95 border-b border-border safe-top">
@@ -72,8 +69,7 @@ export default function PortfolioPage() {
       <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3">
         <p className="text-2xl font-bold">{formatMoney(totalValue, displayCurrency)}</p>
         <p className={totalPL >= 0 ? "text-success text-sm" : "text-danger text-sm"}>{formatMoney(totalPL, displayCurrency)} ({formatPercent(totalCost ? (totalPL / totalCost) * 100 : 0)})</p>
-        <div className="flex flex-wrap gap-1">{RANGES.map((r) => <button key={r} type="button" className={chartRange === r ? "ui-chip ui-chip-active" : "ui-chip"} onClick={() => setChartRange(r)}>{r}</button>)}</div>
-        {periodPoints.length > 1 ? <Sparkline data={periodPoints} positive={totalValue >= totalCost} /> : <p className="text-xs text-muted">Sin serie histórica de periodo {chartRange} (el ZIP pedía un endpoint de velas de cartera que no venía en la carpeta).</p>}
+        <PortfolioPeriodChart holdings={positions.map((p) => ({ symbol: p.symbol, quantity: p.quantity }))} displayCurrency={displayCurrency} />
         <div className="flex gap-2">{(["ALL", "MX", "US"] as const).map((f) => <button key={f} type="button" className={filter === f ? "ui-chip ui-chip-active" : "ui-chip"} onClick={() => setFilter(f)}>{f}</button>)}</div>
         <div className="flex gap-2">
           <button type="button" className="ui-chip" onClick={() => setDisplayCurrency(displayCurrency === "MXN" ? "USD" : "MXN")}>{displayCurrency}</button>
