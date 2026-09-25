@@ -1,2 +1,5 @@
 "use client";
-export default function InstallPrompt() { return null; }
+
+export default function InstallPrompt() {
+  return null;
+}
