@@ -1,30 +1,36 @@
-CÓMO VER MarketPulse EN iPad / iPhone / celular (sin saber programar)
+COMO VER MarketPulse EN iPad / iPhone / celular (sin saber programar)
 
-La app necesita estar en INTERNET (con candado https) para instalarla bien en Apple y Android.
+La app necesita estar en INTERNET (https) para instalarla en Apple y Android.
 Usaremos Vercel (gratis).
 
-PASO 1 — Cuenta gratis
-1. En la computadora, abre https://vercel.com
-2. Pulsa Sign Up.
-3. Entra con Google o GitHub.
+PASO 1 — Cuenta
+https://vercel.com → Sign Up con Google o GitHub.
 
-PASO 2 — Subir el proyecto
-A) GitHub: crea un repo e importa en Vercel Add New Project.
-B) Import Project en Vercel si deja arrastrar carpeta.
+PASO 2 — Proyecto
+Importa el repo privado mxcarteraglobal.
+Root Directory: marketpulse
+Framework: Next.js
+Node: 24.x
 
-PASO 3 — Variables (opcionales)
-Settings → Environment Variables:
-FINNHUB_API_KEY, DATABURSATIL_TOKEN, FMP_API_KEY, POLYGON_API_KEY,
-FINAGE_API_KEY, ALPHA_VANTAGE_API_KEY, TWELVEDATA_API_KEY
+PASO 3 — Variables opcionales
+FINNHUB_API_KEY
+DATABURSATIL_TOKEN
+FMP_API_KEY
+POLYGON_API_KEY
+FINAGE_API_KEY
+ALPHA_VANTAGE_API_KEY
+TWELVEDATA_API_KEY
 
-PASO 4 — Publicar
-Deploy. Enlace tipo https://marketpulse-xxxx.vercel.app
+PASO 4 — Deploy
+URL tipo https://marketpulse-xxxx.vercel.app
 
 PASO 5 — iPhone / iPad
 Safari → enlace → Compartir → Añadir a pantalla de inicio.
 
 PASO 6 — Android
-Chrome → enlace → menú ⋮ → Instalar aplicación.
+Chrome → menú → Instalar aplicación.
 
 PASO 7 — QR
-Abre https://TU-ENLACE/install
+https://TU-ENLACE/install
+
+Después de cada cambio en el chat hay que volver a publicar para que el iPad vea lo nuevo.
