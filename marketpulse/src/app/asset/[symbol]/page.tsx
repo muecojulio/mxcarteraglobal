@@ -9,6 +9,7 @@ import { isSicSymbol } from "@/lib/sic-catalog";
 import { Sparkline, IncomeChart, fmtPct } from "@/components/asset/AssetCharts";
 import { TaxSharesPanel } from "@/components/asset/TaxSharesPanel";
 import { AssetTargets } from "@/components/asset/AssetTargets";
+import { AssetCandles } from "@/components/asset/AssetCandles";
 
 const RANGES = ["1d", "5d", "1mo", "6mo", "1y", "5y"] as const;
 type Candle = { t: number; o: number; h: number; l: number; c: number };
@@ -48,8 +49,9 @@ export default function AssetPage() {
     return () => { cancelled = true; };
   }, [symbol, range]);
   const quote = data?.quote ?? null;
-  const closes = useMemo(() => (data?.history || []).map((h) => h.c), [data]);
-  const chartTimes = useMemo(() => (data?.history || []).map((h) => h.t), [data]);
+  const history = data?.history || [];
+  const closes = useMemo(() => history.map((h) => h.c), [history]);
+  const chartTimes = useMemo(() => history.map((h) => h.t), [history]);
   const chartPositive = closes.length >= 2 ? closes[closes.length - 1] >= closes[0] : (quote?.changePercent ?? 0) >= 0;
   const fibra = getFibraMeta(symbol);
   const lastDiv = data?.dividends?.[0]?.amount ?? 0;
@@ -73,7 +75,7 @@ export default function AssetPage() {
         <p className="text-2xl font-bold">{quote ? formatMxn(toMxn(quote.price, quote.currency, fx?.usdMxn ?? null)) : "—"}</p>
         {quote ? <p className={(quote.changePercent ?? 0) >= 0 ? "text-success text-sm" : "text-danger text-sm"}>{fmtPct(quote.changePercent ?? 0)}</p> : null}
         <div className="flex flex-wrap gap-1">{RANGES.map((r) => <button key={r} type="button" className={range === r ? "ui-chip ui-chip-active" : "ui-chip"} onClick={() => setRange(r)}>{r}</button>)}</div>
-        {spark.length > 1 ? <Sparkline data={spark} times={chartTimes} positive={chartPositive} formatValue={(n) => formatMxn(toMxn(n, quote?.currency || "USD", fx?.usdMxn ?? null))} /> : null}
+        {history.length > 1 ? <AssetCandles history={history} /> : spark.length > 1 ? <Sparkline data={spark} times={chartTimes} positive={chartPositive} formatValue={(n) => formatMxn(toMxn(n, quote?.currency || "USD", fx?.usdMxn ?? null))} /> : null}
         <div className="flex gap-2">{(["resumen", "divs", "fiscal"] as const).map((t) => <button key={t} type="button" className={tab === t ? "ui-chip ui-chip-active" : "ui-chip"} onClick={() => setTab(t)}>{t}</button>)}</div>
         {tab === "resumen" && (
           <div className="text-xs space-y-1">
