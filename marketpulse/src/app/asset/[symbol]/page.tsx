@@ -11,6 +11,8 @@ import { TaxSharesPanel } from "@/components/asset/TaxSharesPanel";
 import { AssetAnalysts } from "@/components/asset/AssetAnalysts";
 import { AssetCandles } from "@/components/asset/AssetCandles";
 import { FibraMetrics } from "@/components/asset/FibraMetrics";
+import { FibraSplitBar } from "@/components/asset/FibraSplitBar";
+import { AssetDividendList } from "@/components/asset/AssetDividendList";
 
 const RANGES = ["1d", "5d", "1mo", "6mo", "1y", "5y"] as const;
 type Candle = { t: number; o: number; h: number; l: number; c: number };
@@ -24,6 +26,7 @@ type AssetPayload = {
   priceTarget?: { consensus: number | null; lastQuarterAvg?: number | null; high?: number | null; low?: number | null; lastQuarterCount?: number | null } | null;
   earnings?: Array<{ period: string; estimate: number | null; actual: number | null; surprisePercent: number | null }>;
   dividends: Array<{ date: string; amount: number }>;
+  assetType?: string;
 };
 export default function AssetPage() {
   const params = useParams<{ symbol: string }>();
@@ -55,7 +58,6 @@ export default function AssetPage() {
   const chartPositive = closes.length >= 2 ? closes[closes.length - 1] >= closes[0] : (quote?.changePercent ?? 0) >= 0;
   const fibra = getFibraMeta(symbol);
   const lastDiv = data?.dividends?.[0]?.amount ?? 0;
-  const split = splitFibraDistribution(lastDiv, fibra);
   const spark = closes.length > 1 ? closes : (data?.dividends || []).slice(0, 24).map((d) => d.amount).reverse();
   const name = data?.profile?.name || quote?.name || raw;
   return (
@@ -85,10 +87,10 @@ export default function AssetPage() {
             <Link href="/analysis" className="text-primary">Análisis textual</Link>
           </div>
         )}
-        {tab === "divs" && (data?.dividends || []).slice(0, 16).map((d, i) => <p key={i} className="text-xs">{d.date} · {d.amount}</p>)}
+        {tab === "divs" && <AssetDividendList symbol={symbol} assetType={data?.assetType} divYield={data?.stats?.divYield} dividends={data?.dividends || []} />}
         {tab === "fiscal" && (
           <>
-            {fibra ? <p className="text-xs text-muted">Fiscal {split.fiscal ?? "—"} / capital {split.capital ?? "—"}</p> : null}
+            <FibraSplitBar symbol={symbol} lastAmount={lastDiv} />
             <FibraMetrics symbol={symbol} price={quote?.price} dividends={data?.dividends || []} />
             <TaxSharesPanel symbol={symbol} lastDivAmount={lastDiv} price={quote?.price} priceCurrency={quote?.currency} usdMxn={fx?.usdMxn ?? null} />
           </>
