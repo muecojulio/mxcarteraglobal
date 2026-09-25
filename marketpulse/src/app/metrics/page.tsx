@@ -1,21 +1,41 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
-type Row = { symbol: string; name: string; type: "stock" | "etf"; region: "US" | "MX"; currency: string; price: number | null; pe: number | null; peg: number | null; pb: number | null; roe: number | null; divYieldPct: number | null; undervalued: boolean | null };
+type Row = { symbol: string; name: string; type?: string; region?: string; pe: number | null; peg: number | null; pb: number | null; roe: number | null; divYieldPct: number | null; undervalued: boolean | null };
+type Filters = { type: "all" | "stock" | "etf"; peMax: string; pegMax: string; pbMax: string; roeMin: string; undervalued: boolean };
+const DEFAULT: Filters = { type: "all", peMax: "15", pegMax: "1", pbMax: "1.5", roeMin: "10", undervalued: false };
+function fmt(n: number | null, d = 2) { if (n == null) return "—"; return n.toLocaleString("es-MX", { minimumFractionDigits: d, maximumFractionDigits: d }); }
 export default function MetricsPage() {
-  const [q, setQ] = useState("AAPL,MSFT,AMXL.MX");
-  const [rows, setRows] = useState<Row[]>([]);
+  const [filters, setFilters] = useState<Filters>(DEFAULT);
+  const [results, setResults] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
-  const load = useCallback(async () => {
-    setLoading(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(true);
+  const [q, setQ] = useState("AAPL,MSFT,JNJ,AMXL.MX,WALMEX.MX");
+  const run = useCallback(async () => {
+    setLoading(true); setError(null);
     try {
-      const res = await fetch(`/api/metrics?symbols=${encodeURIComponent(q)}`);
+      const p = new URLSearchParams({ symbols: q, type: filters.type });
+      if (filters.peMax) p.set("peMax", filters.peMax);
+      if (filters.pegMax) p.set("pegMax", filters.pegMax);
+      if (filters.pbMax) p.set("pbMax", filters.pbMax);
+      if (filters.roeMin) p.set("roeMin", filters.roeMin);
+      if (filters.undervalued) p.set("undervalued", "1");
+      const res = await fetch(`/api/metrics?${p.toString()}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setRows(Array.isArray(data.rows) ? data.rows : []);
-    } catch { setRows([]); }
+      const rows: Row[] = data.results || data.rows || [];
+      setResults(rows.filter((r) => {
+        if (filters.peMax && r.pe != null && r.pe > Number(filters.peMax)) return false;
+        if (filters.pegMax && r.peg != null && r.peg > Number(filters.pegMax)) return false;
+        if (filters.pbMax && r.pb != null && r.pb > Number(filters.pbMax)) return false;
+        if (filters.roeMin && r.roe != null && r.roe < Number(filters.roeMin)) return false;
+        if (filters.undervalued && !r.undervalued) return false;
+        return true;
+      }));
+    } catch (e) { setError(e instanceof Error ? e.message : "Error"); setResults([]); }
     finally { setLoading(false); }
-  }, [q]);
-  useEffect(() => { void load(); }, [load]);
+  }, [filters, q]);
   return (
     <div className="flex flex-col min-h-full">
       <header className="sticky top-0 z-40 bg-background/95 border-b border-border safe-top">
@@ -23,11 +43,22 @@ export default function MetricsPage() {
       </header>
       <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3">
         <input className="ui-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tickers separados por coma" />
-        <button type="button" className="ui-btn ui-btn-primary w-full" onClick={() => void load()}>{loading ? "Cargando…" : "Actualizar"}</button>
-        {rows.map((r) => (
+        <button type="button" className="ui-btn ui-btn-ghost w-full" onClick={() => setShowFilters((v) => !v)}>{showFilters ? "Ocultar filtros" : "Filtros ZIP"}</button>
+        {showFilters ? (
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <label>P/E máx<input className="ui-input" value={filters.peMax} onChange={(e) => setFilters({ ...filters, peMax: e.target.value })} /></label>
+            <label>PEG máx<input className="ui-input" value={filters.pegMax} onChange={(e) => setFilters({ ...filters, pegMax: e.target.value })} /></label>
+            <label>P/B máx<input className="ui-input" value={filters.pbMax} onChange={(e) => setFilters({ ...filters, pbMax: e.target.value })} /></label>
+            <label>ROE mín<input className="ui-input" value={filters.roeMin} onChange={(e) => setFilters({ ...filters, roeMin: e.target.value })} /></label>
+          </div>
+        ) : null}
+        <div className="flex gap-2">{(["all", "stock", "etf"] as const).map((t) => <button key={t} type="button" className={filters.type === t ? "ui-chip ui-chip-active" : "ui-chip"} onClick={() => setFilters({ ...filters, type: t })}>{t}</button>)}</div>
+        <button type="button" className="ui-btn ui-btn-primary w-full" onClick={() => void run()}>{loading ? "Cargando…" : "Filtrar"}</button>
+        {error ? <p className="text-danger text-sm">{error}</p> : null}
+        {results.map((r) => (
           <Link key={r.symbol} href={`/asset/${encodeURIComponent(r.symbol)}`} className="block bg-card border border-border rounded-xl p-3">
             <p className="font-semibold text-sm">{r.symbol} · {r.name}</p>
-            <p className="text-xs text-muted">P/E {r.pe ?? "—"} · PEG {r.peg ?? "—"} · P/B {r.pb ?? "—"} · ROE {r.roe ?? "—"} · yield {r.divYieldPct ?? "—"}</p>
+            <p className="text-xs text-muted">P/E {fmt(r.pe)} · PEG {fmt(r.peg)} · P/B {fmt(r.pb)} · ROE {fmt(r.roe)} · yield {fmt(r.divYieldPct)}</p>
           </Link>
         ))}
       </main>
