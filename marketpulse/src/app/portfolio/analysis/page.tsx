@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useQuotes } from "@/lib/market-data/client";
 import { useUsdMxn, toDisplay } from "@/lib/fx";
 import { RebalanceSuggestions } from "@/components/RebalanceSuggestions";
-type Position = { symbol: string; name?: string; quantity?: number; shares?: number; avgCost?: number; avgPrice?: number; region?: "MX" | "US"; currency?: "MXN" | "USD" };
+import { Donut, yearsToGoal } from "@/components/portfolio/Donut";
+type Position = { symbol: string; name?: string; quantity?: number; shares?: number; avgCost?: number; avgPrice?: number; currency?: "MXN" | "USD" };
 const POS_KEY = "marketpulse_positions";
 const GOAL_KEY = "marketpulse_goal";
 const PROJ_KEY = "marketpulse_projection";
@@ -18,18 +19,20 @@ function formatMoney(value: number, currency: string) {
 }
 export default function PortfolioAnalysisPage() {
   const [positions, setPositions] = useState<Position[]>([]);
-  const [goal, setGoal] = useState(1_000_000);
+  const [goal, setGoal] = useState(3_000_000);
   const [years, setYears] = useState(10);
-  const [growth, setGrowth] = useState(0.08);
+  const [growth, setGrowth] = useState(0.055);
+  const [contribution, setContribution] = useState(9_000);
   const [showProj, setShowProj] = useState(true);
   const { fx } = useUsdMxn();
   useEffect(() => {
     setPositions(loadPositions());
     try {
-      const g = localStorage.getItem(GOAL_KEY); if (g) setGoal(Number(g) || 1_000_000);
+      const g = localStorage.getItem(GOAL_KEY); if (g) setGoal(Number(g) || 3_000_000);
       const p = JSON.parse(localStorage.getItem(PROJ_KEY) || "{}");
       if (p.years) setYears(Number(p.years));
       if (p.growth) setGrowth(Number(p.growth));
+      if (p.contribution) setContribution(Number(p.contribution));
     } catch { /* */ }
   }, []);
   const symbols = useMemo(() => positions.map((p) => p.symbol), [positions]);
@@ -45,7 +48,8 @@ export default function PortfolioAnalysisPage() {
   });
   const total = rows.reduce((s, r) => s + r.value, 0);
   let projected = total;
-  for (let i = 0; i < years; i++) projected *= 1 + growth;
+  for (let i = 0; i < years; i++) projected = projected * (1 + growth) + contribution;
+  const eta = yearsToGoal(total, goal, growth, contribution);
   return (
     <div className="flex flex-col min-h-full">
       <header className="sticky top-0 z-40 bg-background/95 border-b border-border safe-top">
@@ -56,6 +60,8 @@ export default function PortfolioAnalysisPage() {
       </header>
       <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3">
         <p className="text-sm">Valor {formatMoney(total, "MXN")} · meta {formatMoney(goal, "MXN")}</p>
+        {eta !== Infinity ? <p className="text-xs text-muted">Años a la meta ≈ {eta}</p> : <p className="text-xs text-muted">La meta no se alcanza con estos supuestos.</p>}
+        <Donut slices={rows.map((r) => ({ label: r.symbol, value: r.value, color: r.color }))} />
         <input className="ui-input" type="number" value={goal} onChange={(e) => { const n = Number(e.target.value) || 0; setGoal(n); localStorage.setItem(GOAL_KEY, String(n)); }} />
         {rows.map((r) => (
           <p key={r.symbol} className="text-xs bg-card border border-border rounded-xl p-3">
@@ -65,9 +71,10 @@ export default function PortfolioAnalysisPage() {
         <button type="button" className="ui-btn ui-btn-secondary w-full" onClick={() => setShowProj((v) => !v)}>{showProj ? "Ocultar proyección" : "Proyección"}</button>
         {showProj ? (
           <div className="bg-card border border-border rounded-xl p-3 space-y-2 text-sm">
-            <p>A {years} años @ {(growth * 100).toFixed(0)}% ≈ {formatMoney(projected, "MXN")}</p>
-            <input type="range" min={1} max={30} value={years} onChange={(e) => { const n = Number(e.target.value); setYears(n); localStorage.setItem(PROJ_KEY, JSON.stringify({ years: n, growth })); }} />
-            <input type="range" min={0} max={20} value={Math.round(growth * 100)} onChange={(e) => { const n = Number(e.target.value) / 100; setGrowth(n); localStorage.setItem(PROJ_KEY, JSON.stringify({ years, growth: n })); }} />
+            <p>A {years} años ≈ {formatMoney(projected, "MXN")}</p>
+            <input type="range" min={1} max={30} value={years} onChange={(e) => { const n = Number(e.target.value); setYears(n); localStorage.setItem(PROJ_KEY, JSON.stringify({ years: n, growth, contribution })); }} />
+            <input type="range" min={0} max={20} value={Math.round(growth * 100)} onChange={(e) => { const n = Number(e.target.value) / 100; setGrowth(n); localStorage.setItem(PROJ_KEY, JSON.stringify({ years, growth: n, contribution })); }} />
+            <input className="ui-input" type="number" value={contribution} onChange={(e) => { const n = Number(e.target.value) || 0; setContribution(n); localStorage.setItem(PROJ_KEY, JSON.stringify({ years, growth, contribution: n })); }} />
           </div>
         ) : null}
         <RebalanceSuggestions />
