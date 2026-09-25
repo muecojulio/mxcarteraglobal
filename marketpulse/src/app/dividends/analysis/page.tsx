@@ -5,8 +5,9 @@ import { PortfolioEvents } from "@/components/PortfolioEvents";
 import { TaxEstimator } from "@/components/TaxEstimator";
 import { useQuotes } from "@/lib/market-data/client";
 import { estimateDividendTax, detectTaxAssetKind } from "@/lib/tax-mx";
+import { MonthGrid } from "@/components/asset/MonthGrid";
 
-type Position = { symbol: string; name?: string; quantity?: number; shares?: number; avgCost?: number; currency?: string };
+type Position = { symbol: string; name?: string; quantity?: number; shares?: number; avgCost?: number };
 type DivPayment = { date: string; amount: number };
 const POS_KEY = "marketpulse_positions";
 const DIV_GOAL_KEY = "marketpulse_div_goal";
@@ -35,6 +36,7 @@ function annualFromPayments(list: DivPayment[]): number {
 export default function DividendAnalysisPage() {
   const [positions, setPositions] = useState<Position[]>([]);
   const [annualMap, setAnnualMap] = useState<Record<string, number>>({});
+  const [payMap, setPayMap] = useState<Record<string, DivPayment[]>>({});
   const [loadingDivs, setLoadingDivs] = useState(false);
   const [goal, setGoal] = useState(60_000);
   const [years, setYears] = useState(10);
@@ -63,9 +65,13 @@ export default function DividendAnalysisPage() {
     if (!symbols.length) return;
     setLoadingDivs(true);
     const next: Record<string, number> = {};
-    await Promise.all(symbols.map(async (s) => { next[s.toUpperCase()] = annualFromPayments(await fetchDividendPayments(s)); }));
-    setAnnualMap(next);
-    setLoadingDivs(false);
+    const pays: Record<string, DivPayment[]> = {};
+    await Promise.all(symbols.map(async (s) => {
+      const list = await fetchDividendPayments(s);
+      pays[s.toUpperCase()] = list;
+      next[s.toUpperCase()] = annualFromPayments(list);
+    }));
+    setAnnualMap(next); setPayMap(pays); setLoadingDivs(false);
   }, [symbols]);
   useEffect(() => { void loadDivs(); }, [loadDivs]);
   const rows = positions.map((p) => {
@@ -77,12 +83,16 @@ export default function DividendAnalysisPage() {
     return { symbol: p.symbol, qty, annualIncome, net: tax.netApprox };
   });
   const total = rows.reduce((s, r) => s + r.annualIncome, 0);
+  const months = Array.from({ length: 12 }, () => 0);
+  Object.values(payMap).forEach((list) => {
+    list.forEach((d) => {
+      const m = Number(String(d.date).slice(5, 7));
+      if (m >= 1 && m <= 12) months[m - 1] += d.amount;
+    });
+  });
+  if (months.every((n) => n === 0) && total > 0) months.fill(total / 12);
   let projected = total;
-  const projYears: number[] = [total];
-  for (let i = 1; i <= years; i++) {
-    projected = projected * (1 + divGrowth) + contribution * (1 + stockGrowth);
-    projYears.push(projected);
-  }
+  for (let i = 1; i <= years; i++) projected = projected * (1 + divGrowth) + contribution * (1 + stockGrowth);
   return (
     <div className="flex flex-col min-h-full">
       <header className="sticky top-0 z-40 bg-background/95 border-b border-border safe-top">
@@ -93,7 +103,7 @@ export default function DividendAnalysisPage() {
       </header>
       <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3">
         <p className="text-sm">Anual est. {formatMoney(total)} · meta {formatMoney(goal)} {loadingDivs ? "· cargando pagos…" : ""}</p>
-        <label className="text-xs text-muted">Meta anual</label>
+        <MonthGrid amounts={months} />
         <input className="ui-input" type="number" value={goal} onChange={(e) => { const n = Number(e.target.value) || 0; setGoal(n); localStorage.setItem(DIV_GOAL_KEY, String(n)); }} />
         {rows.map((r) => (
           <Link key={r.symbol} href={`/asset/${encodeURIComponent(r.symbol)}`} className="block bg-card border border-border rounded-xl p-3">
@@ -105,11 +115,8 @@ export default function DividendAnalysisPage() {
         {showProj ? (
           <div className="bg-card border border-border rounded-xl p-3 space-y-2 text-sm">
             <p>A {years} años ≈ {formatMoney(projected)}</p>
-            <label className="text-xs text-muted">Años {years}</label>
             <input type="range" min={1} max={30} value={years} onChange={(e) => { const n = Number(e.target.value); setYears(n); localStorage.setItem(DIV_PROJ_KEY, JSON.stringify({ years: n, divGrowth, stockGrowth, contribution })); }} />
-            <label className="text-xs text-muted">Crecimiento divs {(divGrowth * 100).toFixed(1)}%</label>
             <input type="range" min={0} max={15} value={Math.round(divGrowth * 100)} onChange={(e) => { const n = Number(e.target.value) / 100; setDivGrowth(n); localStorage.setItem(DIV_PROJ_KEY, JSON.stringify({ years, divGrowth: n, stockGrowth, contribution })); }} />
-            <label className="text-xs text-muted">Aportación anual {formatMoney(contribution)}</label>
             <input className="ui-input" type="number" value={contribution} onChange={(e) => { const n = Number(e.target.value) || 0; setContribution(n); localStorage.setItem(DIV_PROJ_KEY, JSON.stringify({ years, divGrowth, stockGrowth, contribution: n })); }} />
           </div>
         ) : null}
