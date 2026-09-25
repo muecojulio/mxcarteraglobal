@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { pushRecentSymbol } from "@/lib/persist";
 import { useUsdMxn, toMxn, formatMxn } from "@/lib/fx";
-import { getFibraMeta, splitFibraDistribution } from "@/lib/fibra-meta";
+import { getFibraMeta } from "@/lib/fibra-meta";
 import { isSicSymbol } from "@/lib/sic-catalog";
 import { Sparkline, IncomeChart, fmtPct } from "@/components/asset/AssetCharts";
 import { TaxSharesPanel } from "@/components/asset/TaxSharesPanel";
@@ -13,11 +13,12 @@ import { AssetCandles } from "@/components/asset/AssetCandles";
 import { FibraMetrics } from "@/components/asset/FibraMetrics";
 import { FibraSplitBar } from "@/components/asset/FibraSplitBar";
 import { AssetDividendList } from "@/components/asset/AssetDividendList";
+import { AssetStats } from "@/components/asset/AssetStats";
 
 const RANGES = ["1d", "5d", "1mo", "6mo", "1y", "5y"] as const;
 type Candle = { t: number; o: number; h: number; l: number; c: number };
 type AssetPayload = {
-  quote: { symbol: string; name: string; price: number; changePercent: number; currency: string } | null;
+  quote: { symbol: string; name: string; price: number; changePercent: number; currency: string; low?: number; high?: number; volume?: number } | null;
   profile: { name?: string } | null;
   history: Candle[];
   stats: Record<string, number | null | undefined>;
@@ -80,12 +81,12 @@ export default function AssetPage() {
         {history.length > 1 ? <AssetCandles history={history} /> : spark.length > 1 ? <Sparkline data={spark} times={chartTimes} positive={chartPositive} formatValue={(n) => formatMxn(toMxn(n, quote?.currency || "USD", fx?.usdMxn ?? null))} /> : null}
         <div className="flex gap-2">{(["resumen", "divs", "fiscal"] as const).map((t) => <button key={t} type="button" className={tab === t ? "ui-chip ui-chip-active" : "ui-chip"} onClick={() => setTab(t)}>{t}</button>)}</div>
         {tab === "resumen" && (
-          <div className="text-xs space-y-1">
-            <p>P/E {data?.stats?.pe ?? "—"} · PEG {data?.stats?.peg ?? "—"} · P/B {data?.stats?.pb ?? "—"}</p>
+          <>
+            <AssetStats quote={quote} stats={data?.stats} />
             <IncomeChart income={data?.finance?.income || []} />
             <AssetAnalysts recommendation={data?.recommendation} priceTarget={data?.priceTarget} earnings={data?.earnings} price={quote?.price} />
-            <Link href="/analysis" className="text-primary">Análisis textual</Link>
-          </div>
+            <Link href="/analysis" className="text-primary text-sm">Análisis textual</Link>
+          </>
         )}
         {tab === "divs" && <AssetDividendList symbol={symbol} assetType={data?.assetType} divYield={data?.stats?.divYield} dividends={data?.dividends || []} />}
         {tab === "fiscal" && (
