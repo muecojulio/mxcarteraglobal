@@ -44,7 +44,6 @@ export function setRecoveryContacts(email: string, phone: string): void {
   localStorage.setItem(CONTACT_EMAIL_KEY, email.trim());
   localStorage.setItem(CONTACT_PHONE_KEY, phone.trim());
 }
-export function hasRecoveryCode(): boolean { return !!localStorage.getItem(RECOVERY_HASH_KEY); }
 export async function setPin(pin: string, contacts?: { email?: string; phone?: string }): Promise<{ recoveryCode: string }> {
   if (pin.length < 4 || pin.length > 12) throw new Error("La clave debe tener entre 4 y 12 caracteres");
   localStorage.setItem(PIN_KEY, await sha256(`mxcg:${pin}`));
@@ -53,12 +52,6 @@ export async function setPin(pin: string, contacts?: { email?: string; phone?: s
   localStorage.setItem(RECOVERY_HASH_KEY, await sha256(`mxcg-rec:${recoveryCode}`));
   if (contacts) setRecoveryContacts(contacts.email || "", contacts.phone || "");
   markUnlocked();
-  try {
-    const { unlockVaultWithPin } = await import("./crypto-vault");
-    const { hydrateVaultPersist } = await import("./persist");
-    await unlockVaultWithPin(pin);
-    await hydrateVaultPersist();
-  } catch { /* */ }
   return { recoveryCode };
 }
 export function lockoutRemainingMs(): number {
@@ -71,12 +64,6 @@ export async function verifyPin(pin: string): Promise<boolean> {
   if ((await sha256(`mxcg:${pin}`)) === stored) {
     sessionStorage.removeItem(FAIL_KEY);
     sessionStorage.removeItem(LOCKOUT_UNTIL_KEY);
-    try {
-      const { unlockVaultWithPin } = await import("./crypto-vault");
-      const { hydrateVaultPersist } = await import("./persist");
-      await unlockVaultWithPin(pin);
-      await hydrateVaultPersist();
-    } catch { /* */ }
     return true;
   }
   const fails = Number(sessionStorage.getItem(FAIL_KEY) || "0") + 1;
@@ -87,13 +74,6 @@ export async function verifyPin(pin: string): Promise<boolean> {
   }
   return false;
 }
-export async function resetPinWithRecovery(recoveryCode: string, newPin: string) {
-  const stored = localStorage.getItem(RECOVERY_HASH_KEY);
-  if (!stored) throw new Error("No hay código de recuperación configurado");
-  const normalized = recoveryCode.trim().toUpperCase().replace(/\s+/g, "");
-  if ((await sha256(`mxcg-rec:${normalized}`)) !== stored) throw new Error("Código de recuperación incorrecto");
-  return setPin(newPin);
-}
 export function disableLock(): void {
   [PIN_KEY, ENABLED_KEY, BIO_KEY, RECOVERY_HASH_KEY, CONTACT_EMAIL_KEY, CONTACT_PHONE_KEY].forEach((k) => localStorage.removeItem(k));
   sessionStorage.removeItem(SESSION_KEY);
@@ -102,28 +82,22 @@ export function canUseWebAuthn(): boolean {
   if (typeof window === "undefined") return false;
   return !!(window.PublicKeyCredential && navigator.credentials);
 }
-export async function tryBiometricUnlock(): Promise<boolean> {
-  if (!canUseWebAuthn() || !isLockEnabled()) return false;
-  try {
-    const cred = await navigator.credentials.get({ publicKey: { challenge: crypto.getRandomValues(new Uint8Array(32)), timeout: 60_000, userVerification: "required", rpId: window.location.hostname } });
-    if (cred) { markUnlocked(); return true; }
-  } catch { /* */ }
-  return false;
-}
 export async function registerBiometric(): Promise<boolean> {
   if (!canUseWebAuthn()) return false;
   try {
-    const cred = await navigator.credentials.create({
+    const challenge = crypto.getRandomValues(new Uint8Array(32));
+    const userId = crypto.getRandomValues(new Uint8Array(16));
+    await navigator.credentials.create({
       publicKey: {
-        challenge: crypto.getRandomValues(new Uint8Array(32)),
+        challenge,
         rp: { name: "MX Cartera Global", id: window.location.hostname },
-        user: { id: crypto.getRandomValues(new Uint8Array(16)), name: "usuario-local", displayName: "Usuario" },
-        pubKeyCredParams: [{ alg: -7, type: "public-key" }, { alg: -257, type: "public-key" }],
-        authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required", residentKey: "preferred" },
+        user: { id: userId, name: "local", displayName: "MXCG" },
+        pubKeyCredParams: [{ type: "public-key", alg: -7 }],
         timeout: 60_000,
+        authenticatorSelection: { userVerification: "required" },
       },
     });
-    if (cred) { setBioPreferred(true); return true; }
-  } catch { /* */ }
-  return false;
+    setBioPreferred(true);
+    return true;
+  } catch { return false; }
 }
