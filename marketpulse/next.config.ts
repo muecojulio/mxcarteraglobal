@@ -35,7 +35,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https:",
               "font-src 'self' data:",
-              "connect-src 'self'",
+              "connect-src 'self' https://ws.finnhub.io wss://ws.finnhub.io",
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",
