@@ -6,20 +6,21 @@ export type TaxEstimateResult = { gross: number; usWithholding: number; mxEstima
 export function estimateDividendTax(input: TaxEstimateInput): TaxEstimateResult {
   const { grossDividend: gross, assetKind, scenario } = input;
   const notes: string[] = [];
-  let usWithholding = 0;
-  let mxEstimate = 0;
+  let usWithholding = 0; let mxEstimate = 0;
   if (assetKind === "us_stock" || assetKind === "us_etf") {
     usWithholding = gross * US_DIV_WITHHOLDING[scenario];
-    notes.push(scenario === "w8ben" ? "Retención US estimada 10% (W-8BEN)." : "Retención US estimada 30%.");
+    notes.push(scenario === "w8ben" ? "Retención US estimada 10% (W-8BEN)." : "Retención US estimada 30% (sin W-8BEN).");
+    mxEstimate = 0;
   } else if (assetKind === "mx_stock") {
     mxEstimate = gross * MX_DIV_ISR_ESTIMATE;
-  } else if (assetKind === "fibra") {
+    notes.push("ISR orientativo ~10% sobre dividendos de acciones MX.");
+  } else {
     mxEstimate = gross * 0.15;
+    notes.push("FIBRA: el tratamiento depende del aviso del fiduciario.");
   }
   const netApprox = Math.max(0, gross - usWithholding - mxEstimate);
-  const effectiveRate = gross > 0 ? (gross - netApprox) / gross : 0;
-  notes.push("Solo fines educativos.");
-  return { gross, usWithholding, mxEstimate, netApprox, effectiveRate, notes };
+  notes.push("Solo fines educativos. No sustituye opinión de contador ni del SAT.");
+  return { gross, usWithholding, mxEstimate, netApprox, effectiveRate: gross > 0 ? (gross - netApprox) / gross : 0, notes };
 }
 export function detectTaxAssetKind(symbol: string, assetType?: string): TaxEstimateInput["assetKind"] {
   const s = symbol.toUpperCase();
