@@ -14,12 +14,13 @@ import { FibraMetrics } from "@/components/asset/FibraMetrics";
 import { FibraSplitBar } from "@/components/asset/FibraSplitBar";
 import { AssetDividendList } from "@/components/asset/AssetDividendList";
 import { AssetStats } from "@/components/asset/AssetStats";
+import { AssetProfile, AssetDisclaimer } from "@/components/asset/AssetProfile";
 
 const RANGES = ["1d", "5d", "1mo", "6mo", "1y", "5y"] as const;
 type Candle = { t: number; o: number; h: number; l: number; c: number };
 type AssetPayload = {
-  quote: { symbol: string; name: string; price: number; changePercent: number; currency: string; low?: number; high?: number; volume?: number } | null;
-  profile: { name?: string } | null;
+  quote: { symbol: string; name: string; price: number; changePercent: number; currency: string; low?: number; high?: number; volume?: number; market?: string } | null;
+  profile: { name?: string; industry?: string; exchange?: string } | null;
   history: Candle[];
   stats: Record<string, number | null | undefined>;
   finance: { roe?: number | null; debtEquity?: number | null; income: Array<{ year: string; revenue: number; netIncome: number; margin: number }> };
@@ -82,10 +83,12 @@ export default function AssetPage() {
         <div className="flex gap-2">{(["resumen", "divs", "fiscal"] as const).map((t) => <button key={t} type="button" className={tab === t ? "ui-chip ui-chip-active" : "ui-chip"} onClick={() => setTab(t)}>{t}</button>)}</div>
         {tab === "resumen" && (
           <>
-            <AssetStats quote={quote} stats={data?.stats} />
+            <AssetStats quote={quote} stats={data?.stats} symbol={symbol} assetType={data?.assetType} />
             <IncomeChart income={data?.finance?.income || []} />
             <AssetAnalysts recommendation={data?.recommendation} priceTarget={data?.priceTarget} earnings={data?.earnings} price={quote?.price} />
+            <AssetProfile name={name} assetType={data?.assetType} industry={data?.profile?.industry} exchange={data?.profile?.exchange || quote?.market} />
             <Link href="/analysis" className="text-primary text-sm">Análisis textual</Link>
+            <AssetDisclaimer />
           </>
         )}
         {tab === "divs" && <AssetDividendList symbol={symbol} assetType={data?.assetType} divYield={data?.stats?.divYield} dividends={data?.dividends || []} />}
