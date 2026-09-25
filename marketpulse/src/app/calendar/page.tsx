@@ -1,41 +1,42 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
 import { loadPositions } from "@/lib/persist";
 import { PortfolioEvents } from "@/components/PortfolioEvents";
-type CalendarEvent = { id: string; date: string; symbol?: string; title: string; type: "earnings" | "dividend" | "ipo" | "market"; region: "US" | "MX" | "GLOBAL"; detail?: string };
-const META: Record<CalendarEvent["type"], { label: string }> = { earnings: { label: "Resultados" }, dividend: { label: "Dividendo" }, ipo: { label: "IPO" }, market: { label: "Mercado" } };
+import { useCallback, useEffect, useMemo, useState } from "react";
+type CalendarEvent = { id: string; date: string; symbol?: string; title: string; type: "earnings" | "dividend" | "ipo" | "market" | "delisting"; region: "US" | "MX" | "GLOBAL"; detail?: string; source: string };
+function todayISO() { return new Date().toISOString().slice(0, 10); }
+function addDays(iso: string, days: number) { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + days); return d.toISOString().slice(0, 10); }
+function formatDay(iso: string) { try { return new Date(iso + "T12:00:00").toLocaleDateString("es-MX", { weekday: "short", day: "numeric", month: "short" }); } catch { return iso; } }
 export default function CalendarPage() {
-  const [holdingSymbols, setHoldingSymbols] = useState<string[]>([]);
-  const [onlyHoldings, setOnlyHoldings] = useState(true);
+  const [from, setFrom] = useState(todayISO());
+  const [to, setTo] = useState(addDays(todayISO(), 14));
   const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => { setHoldingSymbols(loadPositions().map((p) => p.symbol.toUpperCase())); }, []);
-  useEffect(() => {
-    let cancel = false;
+  const [loading, setLoading] = useState(false);
+  const symbols = useMemo(() => loadPositions().map((p) => p.symbol), []);
+  const load = useCallback(async () => {
     setLoading(true);
-    fetch("/api/calendar").then(async (r) => (r.ok ? r.json() : { events: [] })).then((j) => { if (!cancel) setEvents(j.events || []); }).catch(() => { if (!cancel) setEvents([]); }).finally(() => { if (!cancel) setLoading(false); });
-    return () => { cancel = true; };
-  }, []);
-  const shown = useMemo(() => onlyHoldings && holdingSymbols.length ? events.filter((e) => e.symbol && holdingSymbols.includes(e.symbol.toUpperCase())) : events, [events, onlyHoldings, holdingSymbols]);
+    try {
+      const res = await fetch(`/api/calendar?from=${from}&to=${to}`);
+      const data = await res.json();
+      setEvents(Array.isArray(data.events) ? data.events : []);
+    } catch { setEvents([]); }
+    finally { setLoading(false); }
+  }, [from, to]);
+  useEffect(() => { void load(); }, [load]);
   return (
     <div className="flex flex-col min-h-full">
       <header className="sticky top-0 z-40 bg-background/95 border-b border-border safe-top">
-        <div className="flex items-center justify-between px-4 h-14 max-w-lg mx-auto">
-          <h1 className="text-lg font-bold">Calendario</h1>
-          <button type="button" className="ui-switch" role="switch" aria-checked={onlyHoldings} onClick={() => setOnlyHoldings((v) => !v)}>
-            <span className="ui-switch-track"><span className="ui-switch-thumb" /></span>
-          </button>
-        </div>
+        <div className="flex items-center px-4 h-14 max-w-lg mx-auto"><h1 className="text-lg font-bold">Calendario</h1></div>
       </header>
       <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3">
-        <PortfolioEvents symbols={holdingSymbols} />
-        <p className="text-xs text-muted">Solo tus posiciones: {onlyHoldings ? "sí" : "no"}. Datos de terceros.</p>
-        {loading ? <p className="text-sm text-muted">Cargando…</p> : shown.length === 0 ? <p className="text-sm text-muted">Sin eventos en este filtro.</p> : shown.map((e) => (
-          <article key={e.id} className="bg-card border border-border rounded-xl p-3">
-            <p className="text-xs text-muted">{e.date} · {META[e.type].label}</p>
-            <p className="font-semibold text-sm">{e.symbol ? `${e.symbol} · ` : ""}{e.title}</p>
-            {e.detail ? <p className="text-xs text-muted mt-1">{e.detail}</p> : null}
-          </article>
+        <div className="flex gap-2"><input className="ui-input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /><input className="ui-input" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
+        <button type="button" className="ui-btn ui-btn-primary w-full" onClick={() => void load()}>{loading ? "Cargando…" : "Consultar"}</button>
+        <PortfolioEvents symbols={symbols} />
+        {events.map((ev) => (
+          <div key={ev.id} className="bg-card border border-border rounded-xl p-3">
+            <p className="text-xs text-muted">{formatDay(ev.date)} · {ev.type} · {ev.region}</p>
+            <p className="text-sm font-medium">{ev.symbol ? `${ev.symbol} · ` : ""}{ev.title}</p>
+            {ev.detail ? <p className="text-xs text-muted">{ev.detail}</p> : null}
+          </div>
         ))}
       </main>
     </div>
