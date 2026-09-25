@@ -1,12 +1,38 @@
-export type SicKind = "stock" | "etf";
-export type SicItem = { symbol: string; name: string; kind: SicKind; region: "US" | "EU" | "ASIA" | "LATAM" | "GLOBAL" };
-export const SIC_CATALOG: SicItem[] = [
-  { symbol: "AAPL", name: "Apple Inc.", kind: "stock", region: "US" },
-  { symbol: "MSFT", name: "Microsoft Corp.", kind: "stock", region: "US" },
-  { symbol: "NVDA", name: "NVIDIA Corp.", kind: "stock", region: "US" },
-  { symbol: "SPY", name: "SPDR S&P 500", kind: "etf", region: "US" },
-];
+/**
+ * Catálogo SIC / Mercado Global BMV.
+ * Partido en módulos para no saturar un solo archivo.
+ */
+export type { SicKind, SicItem } from "./sic-types";
+export { SIC_STOCKS } from "./sic-stocks";
+export { SIC_ETFS } from "./sic-etfs";
+export { SIC_UCITS } from "./sic-ucits";
+
+import type { SicKind, SicItem } from "./sic-types";
+import { SIC_STOCKS } from "./sic-stocks";
+import { SIC_ETFS } from "./sic-etfs";
+import { SIC_UCITS } from "./sic-ucits";
+
+export const SIC_ALL: SicItem[] = [...SIC_STOCKS, ...SIC_ETFS, ...SIC_UCITS];
+
+export function searchSic(q: string, kind?: SicKind | "ALL" | "ucits"): SicItem[] {
+  const needle = q.trim().toUpperCase();
+  const pool =
+    kind === "stock"
+      ? SIC_STOCKS
+      : kind === "etf"
+      ? [...SIC_ETFS, ...SIC_UCITS]
+      : kind === "ucits"
+      ? SIC_UCITS
+      : SIC_ALL;
+  if (!needle) return pool;
+  return pool.filter(
+    (i) =>
+      i.symbol.toUpperCase().includes(needle) ||
+      i.name.toUpperCase().includes(needle)
+  );
+}
+
 export function isSicSymbol(symbol: string): boolean {
   const s = symbol.toUpperCase().replace(/\.MX$/, "");
-  return SIC_CATALOG.some((i) => i.symbol === s);
+  return SIC_ALL.some((i) => i.symbol.toUpperCase() === s);
 }
