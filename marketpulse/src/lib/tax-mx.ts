@@ -6,20 +6,23 @@ export type TaxEstimateResult = { gross: number; usWithholding: number; mxEstima
 export function estimateDividendTax(input: TaxEstimateInput): TaxEstimateResult {
   const { grossDividend: gross, assetKind, scenario } = input;
   const notes: string[] = [];
-  let usWithholding = 0; let mxEstimate = 0;
+  let usWithholding = 0;
+  let mxEstimate = 0;
   if (assetKind === "us_stock" || assetKind === "us_etf") {
-    usWithholding = gross * US_DIV_WITHHOLDING[scenario];
-    notes.push(scenario === "w8ben" ? "Retención US estimada 10% (W-8BEN)." : "Retención US estimada 30% (sin W-8BEN).");
-    mxEstimate = 0;
+    const rate = US_DIV_WITHHOLDING[scenario];
+    usWithholding = gross * rate;
+    notes.push(scenario === "w8ben" ? "Retención US estimada 10% (tratado con W-8BEN vigente en el broker)." : "Retención US estimada 30% (sin W-8BEN / tratado no aplicado).");
+    notes.push("En México el dividendo extranjero puede acumularse; a veces se acredita parte de la retención US. Consulta a tu contador.");
   } else if (assetKind === "mx_stock") {
     mxEstimate = gross * MX_DIV_ISR_ESTIMATE;
-    notes.push("ISR orientativo ~10% sobre dividendos de acciones MX.");
-  } else {
+    notes.push("ISR orientativo ~10% sobre dividendos de acciones MX (puede haber retención en fuente). Confirma tasa vigente.");
+  } else if (assetKind === "fibra") {
     mxEstimate = gross * 0.15;
-    notes.push("FIBRA: el tratamiento depende del aviso del fiduciario.");
+    notes.push("FIBRA: el tratamiento depende de si la distribución es retorno de capital, resultado fiscal, etc.");
+    notes.push("Revisa la constancia del fiduciario/broker; no todo el cash yield tributa igual.");
   }
   const netApprox = Math.max(0, gross - usWithholding - mxEstimate);
-  notes.push("Solo fines educativos. No sustituye opinión de contador ni del SAT.");
+  notes.push("Solo fines educativos. No sustituye opinión de contador público ni del SAT.");
   return { gross, usWithholding, mxEstimate, netApprox, effectiveRate: gross > 0 ? (gross - netApprox) / gross : 0, notes };
 }
 export function detectTaxAssetKind(symbol: string, assetType?: string): TaxEstimateInput["assetKind"] {

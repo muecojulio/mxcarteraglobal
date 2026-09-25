@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { usePageVisible, isPageVisibleNow } from "@/lib/use-page-visible";
 import { cacheGet, cacheSet, cacheGetStale, CACHE_TTL } from "@/lib/local-cache";
 export type FxRate = { usdMxn: number; mxnUsd: number; source: string; asOf: string | null };
@@ -35,8 +35,8 @@ export function useUsdMxn(refreshMs = 120_000) {
       }
     };
     if (!pageVisible) return () => { cancelled = true; };
-    load(false);
-    const id = setInterval(load, refreshMs);
+    void load(false);
+    const id = setInterval(() => void load(), refreshMs);
     return () => { cancelled = true; clearInterval(id); };
   }, [refreshMs, pageVisible]);
   return { fx, loading, error };
@@ -52,8 +52,7 @@ export function toMxn(amount: number, fromCurrency: "USD" | "MXN" | string | und
   if (amount == null || !Number.isFinite(amount)) return 0;
   const from = fromCurrency === "MXN" || fromCurrency === "mxn" ? "MXN" : "USD";
   if (from === "MXN") return amount;
-  const rate = usdMxn && usdMxn > 0 ? usdMxn : 17.5;
-  return amount * rate;
+  return amount * (usdMxn && usdMxn > 0 ? usdMxn : 17.5);
 }
 export function formatMxn(amount: number, digits = 2): string {
   return amount.toLocaleString("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: digits, maximumFractionDigits: digits });
