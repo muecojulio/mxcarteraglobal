@@ -1,21 +1,10 @@
-export type Stock = {
-  symbol: string;
-  name: string;
-  price: number;
-  change: number;
-  changePercent: number;
-  region: "MX" | "US" | "GLOBAL";
-  market: string;
-  currency: string;
-};
-
+export type Stock = { symbol: string; name: string; price: number; change: number; changePercent: number; region: "MX" | "US" | "GLOBAL"; market: string; currency: string };
 export const mockIndices = [
   { name: "S&P 500", symbol: "SPX", price: 5432.1, changePercent: 0.85, region: "US" as const },
   { name: "Nasdaq", symbol: "NDX", price: 17890.45, changePercent: 1.12, region: "US" as const },
   { name: "IPC México", symbol: "MXX", price: 54210.3, changePercent: -0.42, region: "MX" as const },
   { name: "Dow Jones", symbol: "DJI", price: 39875.2, changePercent: 0.31, region: "US" as const },
 ];
-
 export const mockStocks: Stock[] = [
   { symbol: "AAPL", name: "Apple Inc.", price: 214.5, change: 3.82, changePercent: 1.81, region: "US", market: "NASDAQ", currency: "USD" },
   { symbol: "AMXL.MX", name: "América Móvil", price: 15.82, change: -0.1, changePercent: -0.63, region: "MX", market: "BMV", currency: "MXN" },
