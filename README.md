@@ -2,22 +2,36 @@
 
 Seguimiento de mercados — México · EE.UU. · Mundiales · PWA.
 
-Repositorio **privado**.
+Desplegable directamente en **Vercel** sin pasos adicionales.
 
 ## Requisitos
 
-- Node.js **24.x** (`engines.node` en package.json)
+- Node.js **20 o superior**
 
 ```bash
-cd marketpulse
 npm install
 npm run dev
 ```
 
-## Notas de esta entrega
+## Despliegue en Vercel
+
+1. Importa este repositorio en Vercel.
+2. Framework detectado automáticamente como **Next.js**.
+3. No requiere variables de entorno obligatorias; las API keys opcionales (`.env.example`) se pueden agregar en Project Settings → Environment Variables.
+4. Presiona Deploy.
+
+## Scripts
+
+- `npm run dev` — Servidor de desarrollo.
+- `npm run build` — Build de producción (usado por Vercel).
+- `npm start` — Servidor de producción.
+- `npm run lint` — ESLint.
+
+## Notas
 
 - Interacciones de botones y switches en `src/app/globals.css` (hover solo en puntero fino).
 - Caché local (`src/lib/local-cache.ts`) + Cache-Control en `/api/*`.
 - No hay base SQL: no se aplican índices relacionales. Ver `docs/DATOS_E_INDICES.md`.
 - Aviso de privacidad en `/legal/privacidad` (borrador LFPDPPP).
-- El ZIP de origen no incluía `src/components` ni `public/`; layout referencia esos módulos.
+- PWA lista con `public/manifest.webmanifest`, `public/sw.js` e iconos generados.
+- Middleware de rate limit y validación de origen en `src/middleware.ts` (compatible con despliegue serverless de Vercel).
