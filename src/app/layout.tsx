@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import BottomNav from "@/components/BottomNav";
 import InstallPrompt from "@/components/InstallPrompt";
@@ -11,8 +10,8 @@ import { SecurityOnboarding } from "@/components/SecurityOnboarding";
 import LegalBanner from "@/components/LegalBanner";
 import { ToastProvider } from "@/components/Toast";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+// Usamos pila de fuentes del sistema para evitar dependencias de red en build/despliegue.
+const fontClasses = "font-sans";
 
 export const metadata: Metadata = {
   title: { default: "MX Cartera Global", template: "%s · MX Cartera Global" },
@@ -45,7 +44,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="es" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`} suppressHydrationWarning>
+    <html lang="es" className={`h-full antialiased ${fontClasses}`} suppressHydrationWarning>
       <head>
         <link rel="manifest" href="/manifest.webmanifest" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
