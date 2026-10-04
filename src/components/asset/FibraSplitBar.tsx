@@ -20,10 +20,10 @@ export function FibraSplitBar({ symbol, lastAmount }: { symbol: string; lastAmou
           <p className="font-semibold">{split.capital != null ? `≈ ${fmt(split.capital)} $ / CBFI` : "N/D"}</p>
         </div>
       </div>
-      {split.fiscalPct != null && split.capitalPct != null ? (
-        <div className="h-2.5 rounded-full bg-secondary overflow-hidden flex mb-2">
-          <div className="h-full bg-amber-500/90" style={{ width: `${split.fiscalPct}%` }} />
-          <div className="h-full bg-sky-500/80" style={{ width: `${split.capitalPct}%` }} />
+      {meta.fiscalResultPct != null && meta.capitalReturnPct != null ? (
+        <div className="h-2.5 rounded-full bg-secondary overflow-hidden flex mb-2" role="img" aria-label={`Distribución estimada: ${meta.fiscalResultPct}% resultado fiscal y ${meta.capitalReturnPct}% reembolso de capital`}>
+          <div className="h-full bg-amber-500/90" style={{ width: `${meta.fiscalResultPct}%` }} />
+          <div className="h-full bg-sky-500/80" style={{ width: `${meta.capitalReturnPct}%` }} />
         </div>
       ) : null}
       <div className="flex gap-3 text-[10px] text-muted mb-2">

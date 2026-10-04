@@ -15,9 +15,7 @@ export async function GET(req: NextRequest) {
     const p = getMarketDataProvider();
     const [quote, dividends, summary, history] = await Promise.all([
       p.getQuote(symbol),
-      typeof (p as { getDividends?: (s: string) => Promise<Array<{ date: string; amount: number }>> }).getDividends === "function"
-        ? (p as { getDividends: (s: string) => Promise<Array<{ date: string; amount: number }>> }).getDividends(symbol)
-        : freeYahooDividends(symbol),
+      p.getDividends ? p.getDividends(symbol) : freeYahooDividends(symbol),
       freeYahooSummary(symbol),
       freeYahooHistory(symbol, range),
     ]);

@@ -64,7 +64,7 @@ Settings → Domains → añade tu dominio.
 - ✅ Build de producción (`npm run build`) pasa sin errores.
 - ✅ `package.json` en la raíz del repositorio.
 - ✅ `vercel.json` configurado para Next.js.
-- ✅ Node.js >=20 soportado (Vercel usa 20/22 por defecto).
+- ✅ Node.js 24.x fijado en `package.json` (runtime vigente de Vercel).
 - ✅ PWA: `manifest.webmanifest`, `sw.js` e iconos en `public/`.
 - ✅ Sin dependencias de red en build (fuentes del sistema en lugar de Google Fonts).
 

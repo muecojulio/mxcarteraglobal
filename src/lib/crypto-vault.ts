@@ -10,8 +10,13 @@ function unb64(s: string): Uint8Array {
   for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
   return u;
 }
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
 async function importAesRaw(raw: Uint8Array): Promise<CryptoKey> {
-  return crypto.subtle.importKey("raw", raw, "AES-GCM", true, ["encrypt", "decrypt"]);
+  return crypto.subtle.importKey("raw", toArrayBuffer(raw), "AES-GCM", true, ["encrypt", "decrypt"]);
 }
 export function isEncryptedBlob(text: string | null | undefined): boolean {
   return !!text && text.startsWith(ENC_PREFIX);
@@ -19,7 +24,7 @@ export function isEncryptedBlob(text: string | null | undefined): boolean {
 export async function encryptText(plain: string, rawKey: Uint8Array): Promise<string> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await importAesRaw(rawKey);
-  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(plain));
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv: toArrayBuffer(iv) }, key, toArrayBuffer(new TextEncoder().encode(plain)));
   return ENC_PREFIX + b64(iv) + "." + b64(ct);
 }
 export async function decryptText(blob: string, rawKey: Uint8Array): Promise<string> {
@@ -27,10 +32,10 @@ export async function decryptText(blob: string, rawKey: Uint8Array): Promise<str
   const parts = blob.slice(ENC_PREFIX.length).split(".");
   const iv = unb64(parts[0]); const ct = unb64(parts[1]);
   const key = await importAesRaw(rawKey);
-  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
+  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: toArrayBuffer(iv) }, key, toArrayBuffer(ct));
   return new TextDecoder().decode(pt);
 }
 export function clearSessionMasterKey(): void {
   try { sessionStorage.removeItem(MK_SESSION); } catch { /* */ }
 }
-export async function unlockVaultWithPin(_pin: string): Promise<void> { /* PIN abre sesión; persist hidrata aparte */ }
+export async function unlockVaultWithPin(_pin: string): Promise<void> { void _pin; /* PIN abre sesión; persist hidrata aparte */ }

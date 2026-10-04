@@ -5,6 +5,7 @@ import { useQuotes } from "@/lib/market-data/client";
 import { useUsdMxn, toDisplay } from "@/lib/fx";
 import { RebalanceSuggestions } from "@/components/RebalanceSuggestions";
 import { Donut, yearsToGoal } from "@/components/portfolio/Donut";
+import { CollapsiblePanel } from "@/components/ui/CollapsiblePanel";
 type Position = { symbol: string; name?: string; quantity?: number; shares?: number; avgCost?: number; avgPrice?: number; currency?: "MXN" | "USD" };
 const POS_KEY = "marketpulse_positions";
 const GOAL_KEY = "marketpulse_goal";
@@ -26,14 +27,17 @@ export default function PortfolioAnalysisPage() {
   const [showProj, setShowProj] = useState(true);
   const { fx } = useUsdMxn();
   useEffect(() => {
-    setPositions(loadPositions());
-    try {
-      const g = localStorage.getItem(GOAL_KEY); if (g) setGoal(Number(g) || 3_000_000);
-      const p = JSON.parse(localStorage.getItem(PROJ_KEY) || "{}");
-      if (p.years) setYears(Number(p.years));
-      if (p.growth) setGrowth(Number(p.growth));
-      if (p.contribution) setContribution(Number(p.contribution));
-    } catch { /* */ }
+    const frame = window.requestAnimationFrame(() => {
+      setPositions(loadPositions());
+      try {
+        const g = localStorage.getItem(GOAL_KEY); if (g) setGoal(Number(g) || 3_000_000);
+        const p = JSON.parse(localStorage.getItem(PROJ_KEY) || "{}");
+        if (p.years) setYears(Number(p.years));
+        if (p.growth) setGrowth(Number(p.growth));
+        if (p.contribution) setContribution(Number(p.contribution));
+      } catch { /* */ }
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, []);
   const symbols = useMemo(() => positions.map((p) => p.symbol), [positions]);
   const { data } = useQuotes(symbols, 60_000);
@@ -54,7 +58,7 @@ export default function PortfolioAnalysisPage() {
     <div className="flex flex-col min-h-full">
       <header className="sticky top-0 z-40 bg-background/95 border-b border-border safe-top">
         <div className="flex items-center gap-3 px-4 h-14 max-w-lg mx-auto">
-          <Link href="/portfolio" className="text-primary text-sm">← Cartera</Link>
+          <Link href="/portfolio" className="ui-text-action text-primary text-sm">← Cartera</Link>
           <h1 className="text-lg font-bold">Análisis</h1>
         </div>
       </header>
@@ -62,21 +66,29 @@ export default function PortfolioAnalysisPage() {
         <p className="text-sm">Valor {formatMoney(total, "MXN")} · meta {formatMoney(goal, "MXN")}</p>
         {eta !== Infinity ? <p className="text-xs text-muted">Años a la meta ≈ {eta}</p> : <p className="text-xs text-muted">La meta no se alcanza con estos supuestos.</p>}
         <Donut slices={rows.map((r) => ({ label: r.symbol, value: r.value, color: r.color }))} />
-        <input className="ui-input" type="number" value={goal} onChange={(e) => { const n = Number(e.target.value) || 0; setGoal(n); localStorage.setItem(GOAL_KEY, String(n)); }} />
+        <label className="block space-y-1 text-xs font-medium" htmlFor="portfolio-goal">Meta de cartera (MXN)
+          <input id="portfolio-goal" className="ui-input" type="number" min="0" inputMode="decimal" value={goal} onChange={(e) => { const n = Number(e.target.value) || 0; setGoal(n); localStorage.setItem(GOAL_KEY, String(n)); }} />
+        </label>
         {rows.map((r) => (
           <p key={r.symbol} className="text-xs bg-card border border-border rounded-xl p-3">
             <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ background: r.color }} />{r.symbol} · {formatMoney(r.value, "MXN")} {total ? `· ${((r.value / total) * 100).toFixed(1)}%` : ""}
           </p>
         ))}
-        <button type="button" className="ui-btn ui-btn-secondary w-full" onClick={() => setShowProj((v) => !v)}>{showProj ? "Ocultar proyección" : "Proyección"}</button>
-        {showProj ? (
-          <div className="bg-card border border-border rounded-xl p-3 space-y-2 text-sm">
-            <p>A {years} años ≈ {formatMoney(projected, "MXN")}</p>
-            <input type="range" min={1} max={30} value={years} onChange={(e) => { const n = Number(e.target.value); setYears(n); localStorage.setItem(PROJ_KEY, JSON.stringify({ years: n, growth, contribution })); }} />
-            <input type="range" min={0} max={20} value={Math.round(growth * 100)} onChange={(e) => { const n = Number(e.target.value) / 100; setGrowth(n); localStorage.setItem(PROJ_KEY, JSON.stringify({ years, growth: n, contribution })); }} />
-            <input className="ui-input" type="number" value={contribution} onChange={(e) => { const n = Number(e.target.value) || 0; setContribution(n); localStorage.setItem(PROJ_KEY, JSON.stringify({ years, growth, contribution: n })); }} />
-          </div>
-        ) : null}
+        <button id="portfolio-projection-toggle" type="button" className="ui-btn ui-btn-secondary w-full" aria-expanded={showProj} aria-controls="portfolio-projection-panel" onClick={() => setShowProj((v) => !v)}>
+          {showProj ? "Ocultar proyección" : "Mostrar proyección"}
+        </button>
+        <CollapsiblePanel id="portfolio-projection-panel" labelledBy="portfolio-projection-toggle" open={showProj} className="bg-card border border-border rounded-xl p-3 space-y-2 text-sm">
+          <p>A {years} años ≈ {formatMoney(projected, "MXN")}</p>
+          <label className="block text-xs font-medium" htmlFor="portfolio-years">Años de proyección
+            <input id="portfolio-years" type="range" min={1} max={30} value={years} onChange={(e) => { const n = Number(e.target.value); setYears(n); localStorage.setItem(PROJ_KEY, JSON.stringify({ years: n, growth, contribution })); }} />
+          </label>
+          <label className="block text-xs font-medium" htmlFor="portfolio-growth">Crecimiento anual estimado (%)
+            <input id="portfolio-growth" type="range" min={0} max={20} value={Math.round(growth * 100)} onChange={(e) => { const n = Number(e.target.value) / 100; setGrowth(n); localStorage.setItem(PROJ_KEY, JSON.stringify({ years, growth: n, contribution })); }} />
+          </label>
+          <label className="block space-y-1 text-xs font-medium" htmlFor="portfolio-contribution">Aportación anual (MXN)
+            <input id="portfolio-contribution" className="ui-input" type="number" min="0" inputMode="decimal" value={contribution} onChange={(e) => { const n = Number(e.target.value) || 0; setContribution(n); localStorage.setItem(PROJ_KEY, JSON.stringify({ years, growth, contribution: n })); }} />
+          </label>
+        </CollapsiblePanel>
         <RebalanceSuggestions />
       </main>
     </div>

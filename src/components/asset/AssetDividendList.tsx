@@ -23,7 +23,7 @@ export function AssetDividendList({
     <section className="bg-card rounded-xl border border-border p-4 mb-4">
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-sm font-semibold">{isFibra ? "Distribuciones" : "Dividendos"}</h2>
-        <Link href={`/dividends?symbol=${encodeURIComponent(symbol)}`} className="text-xs text-primary font-medium">Ver más</Link>
+        <Link href={`/dividends?symbol=${encodeURIComponent(symbol)}`} className="ui-text-action text-xs text-primary font-medium">Ver más</Link>
       </div>
       {divYield != null ? <p className="text-2xl font-bold mb-3">{fmt(Number(divYield), 2)}% <span className="text-xs font-normal text-muted">rentabilidad</span></p> : null}
       {dividends.slice(0, 6).map((d, i) => {

@@ -7,18 +7,16 @@ export function Donut({
   const total = slices.reduce((s, x) => s + x.value, 0) || 1;
   const r = 42;
   const c = 2 * Math.PI * r;
-  let offset = 0;
   return (
     <div className="relative w-48 h-48 mx-auto">
       <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
-        {slices.map((sl) => {
+        {slices.map((sl, index) => {
           const pct = sl.value / total;
           const dash = pct * c;
-          const el = (
+          const offset = slices.slice(0, index).reduce((sum, slice) => sum + (slice.value / total) * c, 0);
+          return (
             <circle key={sl.label} cx="50" cy="50" r={r} fill="none" stroke={sl.color} strokeWidth="12" strokeDasharray={`${dash} ${c - dash}`} strokeDashoffset={-offset} />
           );
-          offset += dash;
-          return el;
         })}
         <circle cx="50" cy="50" r="30" className="fill-[var(--card)]" />
       </svg>

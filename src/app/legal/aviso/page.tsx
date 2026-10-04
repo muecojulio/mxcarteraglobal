@@ -5,7 +5,7 @@ export default function AvisoPage() {
     <div className="flex flex-col min-h-full">
       <header className="sticky top-0 z-40 bg-background/95 border-b border-border safe-top">
         <div className="flex items-center gap-3 px-4 h-14 max-w-lg mx-auto">
-          <Link href="/legal" className="text-muted text-sm">‹</Link>
+          <Link href="/legal" className="ui-text-action text-muted text-sm" aria-label="Volver a avisos legales">‹</Link>
           <h1 className="text-lg font-bold">No somos asesor</h1>
         </div>
       </header>

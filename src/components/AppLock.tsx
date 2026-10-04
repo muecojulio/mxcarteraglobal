@@ -8,11 +8,15 @@ export default function AppLock({ children }: { children: React.ReactNode }) {
   const [locked, setLocked] = useState(false);
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    const need = isLockEnabled() && !isUnlockedThisSession();
-    setLocked(need);
-    setReady(true);
+    const frame = window.requestAnimationFrame(() => {
+      const need = isLockEnabled() && !isUnlockedThisSession();
+      setLocked(need);
+      setReady(true);
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   if (!ready) return null;
@@ -21,12 +25,26 @@ export default function AppLock({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-full flex flex-col items-center justify-center px-6 gap-3">
       <h1 className="text-lg font-bold">Desbloquear</h1>
-      <input className="ui-input max-w-xs" type="password" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="Clave" />
-      {error ? <p className="text-sm text-danger">{error}</p> : null}
-      <button type="button" className="ui-btn ui-btn-primary" onClick={async () => {
-        const ok = await verifyPin(pin);
-        if (ok) { markUnlocked(); setLocked(false); } else setError("Clave incorrecta");
-      }}>Entrar</button>
+      <form className="w-full flex flex-col items-center gap-3" onSubmit={async (event) => {
+        event.preventDefault();
+        if (busy) return;
+        setBusy(true);
+        setError("");
+        try {
+          const ok = await verifyPin(pin);
+          if (ok) { markUnlocked(); setLocked(false); }
+          else setError("Clave incorrecta");
+        } catch {
+          setError("No se pudo verificar la clave. Inténtalo de nuevo.");
+        } finally { setBusy(false); }
+      }}>
+        <label className="sr-only" htmlFor="unlock-pin">Clave de acceso</label>
+        <input id="unlock-pin" className="ui-input max-w-xs" type="password" inputMode="numeric" autoComplete="current-password" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="Clave" />
+        {error ? <p className="text-sm text-danger" role="alert">{error}</p> : null}
+        <button type="submit" className="ui-btn ui-btn-primary" disabled={busy || !pin} aria-busy={busy}>
+          {busy ? "Verificando…" : "Entrar"}
+        </button>
+      </form>
     </div>
   );
 }

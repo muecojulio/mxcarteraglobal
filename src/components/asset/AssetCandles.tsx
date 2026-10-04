@@ -12,7 +12,7 @@ export function AssetCandles({ history }: { history: Candle[] }) {
   const h = 140;
   const slot = w / data.length;
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-36" role="img" aria-label="Velas">
+    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-36" role="img" aria-label="Gráfico de velas" data-swipe-ignore>
       {data.map((d, i) => {
         const x = i * slot + slot / 2;
         const yHigh = ((max - d.h) / span) * (h - 8) + 4;

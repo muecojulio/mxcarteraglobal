@@ -1,6 +1,7 @@
 "use client";
 import { loadPositions } from "@/lib/persist";
 import { PortfolioEvents } from "@/components/PortfolioEvents";
+import { ScrollableChips } from "@/components/ui/ScrollableChips";
 import { useCallback, useEffect, useMemo, useState } from "react";
 type CalendarEvent = { id: string; date: string; symbol?: string; title: string; type: "earnings" | "dividend" | "ipo" | "market" | "delisting"; region: "US" | "MX" | "GLOBAL"; detail?: string; source: string };
 const TYPE_META: Record<CalendarEvent["type"], { label: string; icon: string }> = {
@@ -21,18 +22,24 @@ export default function CalendarPage() {
   const [search, setSearch] = useState("");
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [onlyHoldings, setOnlyHoldings] = useState(true);
   const holdingSymbols = useMemo(() => loadPositions().map((p) => p.symbol), []);
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError("");
     try {
       const res = await fetch(`/api/calendar?from=${from}&to=${to}&type=${filter}`);
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       setEvents(Array.isArray(data.events) ? data.events : []);
-    } catch { setEvents([]); }
+    } catch { setEvents([]); setLoadError("No se pudieron cargar los eventos. Intenta consultar de nuevo."); }
     finally { setLoading(false); }
   }, [from, to, filter]);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => { void load(); });
+    return () => window.cancelAnimationFrame(frame);
+  }, [load]);
   const visible = events.filter((ev) => {
     if (region !== "ALL" && ev.region !== region && ev.region !== "GLOBAL") return false;
     if (filter !== "all" && ev.type !== filter) return false;
@@ -46,12 +53,33 @@ export default function CalendarPage() {
         <div className="flex items-center px-4 h-14 max-w-lg mx-auto"><h1 className="text-lg font-bold">Calendario</h1></div>
       </header>
       <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3">
-        <div className="flex gap-2"><input className="ui-input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /><input className="ui-input" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
-        <input className="ui-input" placeholder="Buscar" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <div className="flex flex-wrap gap-1">{(["all", "earnings", "dividend", "ipo", "delisting"] as const).map((t) => <button key={t} type="button" className={filter === t ? "ui-chip ui-chip-active" : "ui-chip"} onClick={() => setFilter(t)}>{t === "all" ? "Todos" : TYPE_META[t].label}</button>)}</div>
-        <div className="flex gap-2">{(["ALL", "US", "MX"] as const).map((r) => <button key={r} type="button" className={region === r ? "ui-chip ui-chip-active" : "ui-chip"} onClick={() => setRegion(r)}>{r}</button>)}</div>
-        <button type="button" className={onlyHoldings ? "ui-chip ui-chip-active" : "ui-chip"} onClick={() => setOnlyHoldings((v) => !v)}>Solo cartera</button>
-        <button type="button" className="ui-btn ui-btn-primary w-full" onClick={() => void load()}>{loading ? "Cargando…" : "Consultar"}</button>
+        <div className="flex gap-2">
+          <label className="min-w-0 flex-1 text-xs font-medium" htmlFor="calendar-from">Desde
+            <input id="calendar-from" className="ui-input mt-1" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+          </label>
+          <label className="min-w-0 flex-1 text-xs font-medium" htmlFor="calendar-to">Hasta
+            <input id="calendar-to" className="ui-input mt-1" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+          </label>
+        </div>
+        <label className="sr-only" htmlFor="calendar-search">Buscar eventos por ticker o nombre</label>
+        <input id="calendar-search" className="ui-input" placeholder="Buscar" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <ScrollableChips
+          label="Filtrar calendario por tipo de evento"
+          options={(["all", "earnings", "dividend", "ipo", "delisting"] as const).map((item) => ({ value: item, label: item === "all" ? "Todos" : TYPE_META[item].label }))}
+          value={filter}
+          onChange={setFilter}
+        />
+        <ScrollableChips
+          label="Filtrar calendario por mercado"
+          options={(["ALL", "US", "MX"] as const).map((item) => ({ value: item, label: item === "ALL" ? "Todos" : item === "US" ? "EE.UU." : "México" }))}
+          value={region}
+          onChange={setRegion}
+        />
+        <button type="button" className={`ui-chip${onlyHoldings ? " ui-chip-active" : ""}`} aria-pressed={onlyHoldings} onClick={() => setOnlyHoldings((v) => !v)}>Solo cartera</button>
+        <button type="button" className="ui-btn ui-btn-primary w-full" disabled={loading} aria-busy={loading} onClick={() => void load()}>
+          {loading ? "Consultando…" : "Consultar"}
+        </button>
+        {loadError ? <p className="text-danger text-sm" role="alert">{loadError}</p> : null}
         <PortfolioEvents symbols={holdingSymbols} />
         {visible.map((ev) => (
           <div key={ev.id} className="bg-card border border-border rounded-xl p-3">
@@ -59,7 +87,7 @@ export default function CalendarPage() {
             <p className="text-sm font-medium">{ev.symbol ? `${ev.symbol} · ` : ""}{ev.title}</p>
           </div>
         ))}
-        {!loading && visible.length === 0 ? <p className="text-xs text-muted">Sin eventos en el rango (la API del ZIP puede devolver lista vacía).</p> : null}
+        {!loading && !loadError && visible.length === 0 ? <p className="text-xs text-muted">Sin eventos en el rango (la API del ZIP puede devolver lista vacía).</p> : null}
       </main>
     </div>
   );

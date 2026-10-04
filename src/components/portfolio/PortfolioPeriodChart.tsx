@@ -1,7 +1,14 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import { Sparkline } from "@/components/asset/AssetCharts";
+import { ScrollableChips } from "@/components/ui/ScrollableChips";
+
 const RANGES = ["1s", "1m", "3m", "1a", "5a"] as const;
+
+type PortfolioSeries = { key: string; points: number[]; percent: number | null };
+type HistoryResponse = { points?: Array<{ value: number }>; periodChangePercent?: number | null };
+
 export function PortfolioPeriodChart({
   holdings,
   displayCurrency,
@@ -10,30 +17,43 @@ export function PortfolioPeriodChart({
   displayCurrency: string;
 }) {
   const [range, setRange] = useState<(typeof RANGES)[number]>("1s");
-  const [points, setPoints] = useState<number[]>([]);
-  const [pct, setPct] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
+  const holdingsKey = holdings.map((holding) => `${holding.symbol}:${holding.quantity}`).join(",");
+  const requestKey = `${holdingsKey}|${range}|${displayCurrency}`;
+  const [series, setSeries] = useState<PortfolioSeries | null>(null);
+  const currentSeries = series?.key === requestKey ? series : null;
+  const points = currentSeries?.points ?? [];
+  const pct = currentSeries?.percent ?? null;
+  const loading = !!holdingsKey && !currentSeries;
+
   useEffect(() => {
-    if (!holdings.length) { setPoints([]); return; }
-    const q = holdings.map((h) => `${h.symbol}:${h.quantity}`).join(",");
+    if (!holdingsKey) return;
     let cancelled = false;
-    setLoading(true);
-    fetch(`/api/portfolio-history?holdings=${encodeURIComponent(q)}&range=${range}&display=${displayCurrency}`)
-      .then((r) => r.json())
-      .then((d) => {
+    fetch(`/api/portfolio-history?holdings=${encodeURIComponent(holdingsKey)}&range=${range}&display=${displayCurrency}`)
+      .then((response) => response.json() as Promise<HistoryResponse>)
+      .then((data) => {
         if (cancelled) return;
-        setPoints((d.points || []).map((p: { value: number }) => p.value));
-        setPct(d.periodChangePercent != null ? Number(d.periodChangePercent) : null);
+        setSeries({
+          key: requestKey,
+          points: (data.points ?? []).map((point) => point.value),
+          percent: data.periodChangePercent != null ? Number(data.periodChangePercent) : null,
+        });
       })
-      .catch(() => { if (!cancelled) setPoints([]); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .catch(() => {
+        if (!cancelled) setSeries({ key: requestKey, points: [], percent: null });
+      });
     return () => { cancelled = true; };
-  }, [holdings, range, displayCurrency]);
+  }, [holdingsKey, range, displayCurrency, requestKey]);
+
   const positive = (pct ?? 0) >= 0;
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap gap-1">{RANGES.map((r) => <button key={r} type="button" className={range === r ? "ui-chip ui-chip-active" : "ui-chip"} onClick={() => setRange(r)}>{r}</button>)}</div>
-      {loading ? <p className="text-xs text-muted">Cargando serie…</p> : null}
+      <ScrollableChips
+        label="Periodo de evolución de cartera"
+        options={RANGES.map((item) => ({ value: item, label: item }))}
+        value={range}
+        onChange={setRange}
+      />
+      {loading ? <p className="text-xs text-muted" role="status" aria-live="polite">Cargando serie…</p> : null}
       {pct != null ? <p className={positive ? "text-success text-xs" : "text-danger text-xs"}>{positive ? "+" : ""}{pct.toFixed(2)}% en el periodo</p> : null}
       {points.length > 1 ? <Sparkline data={points} positive={positive} /> : !loading ? <p className="text-xs text-muted">Sin serie (Yahoo puede no responder desde el servidor).</p> : null}
     </div>

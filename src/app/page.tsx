@@ -9,9 +9,12 @@ function formatPercent(n: number) { return `${n >= 0 ? "+" : ""}${n.toFixed(2)}%
 export default function HomePage() {
   const [watchSymbols, setWatchSymbols] = useState<string[]>([]);
   useEffect(() => {
-    const wl = loadWatchlist();
-    const recent = loadRecentSymbols();
-    setWatchSymbols([...wl, ...recent.filter((s) => !wl.includes(s))].slice(0, 8));
+    const frame = window.requestAnimationFrame(() => {
+      const wl = loadWatchlist();
+      const recent = loadRecentSymbols();
+      setWatchSymbols([...wl, ...recent.filter((s) => !wl.includes(s))].slice(0, 8));
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, []);
   const { data: indicesData, loading: indicesLoading } = useIndices(60_000);
   const { data: quotesData, loading: quotesLoading } = useQuotes(watchSymbols, 60_000);
@@ -39,7 +42,7 @@ export default function HomePage() {
         <section>
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-sm text-muted uppercase tracking-wide">Índices</h3>
-            <Link href="/calendar" className="text-primary text-sm font-medium">Agenda</Link>
+            <Link href="/calendar" className="ui-text-action text-primary text-sm font-medium">Agenda</Link>
           </div>
           {indicesLoading && indices.length === 0 ? (
             <div className="grid grid-cols-2 gap-3">{[1, 2, 3, 4].map((i) => <div key={i} className="bg-card rounded-xl border border-border h-24 animate-pulse" />)}</div>
@@ -57,7 +60,7 @@ export default function HomePage() {
         <section>
           <h3 className="font-semibold text-sm text-muted uppercase tracking-wide mb-2">Watchlist / recientes</h3>
           {quotesLoading && quotes.length === 0 ? <p className="text-sm text-muted">Cargando…</p> : quotes.map((q) => (
-            <Link key={q.symbol} href={`/asset/${encodeURIComponent(q.symbol)}`} className="flex justify-between py-2 border-b border-border text-sm">
+            <Link key={q.symbol} href={`/asset/${encodeURIComponent(q.symbol)}`} className="flex min-h-11 items-center justify-between py-2 border-b border-border text-sm">
               <span>{q.symbol}</span>
               <span>{formatMxn(toMxn(q.price, q.currency, fx?.usdMxn ?? null))} <span className={q.changePercent >= 0 ? "text-success" : "text-danger"}>{formatPercent(q.changePercent)}</span></span>
             </Link>

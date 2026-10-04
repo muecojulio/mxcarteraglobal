@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+import { ScrollableChips } from "@/components/ui/ScrollableChips";
 type AnalysisResult = {
   symbol: string;
   name: string;
@@ -15,6 +16,7 @@ export default function AnalysisPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const run = async (sym?: string) => {
+    if (loading) return;
     const s = (sym || symbol).trim().toUpperCase();
     if (!s) return;
     setSymbol(s); setLoading(true); setError(null);
@@ -33,13 +35,23 @@ export default function AnalysisPage() {
       </header>
       <main className="flex-1 max-w-lg mx-auto w-full px-4 pb-10">
         <p className="text-xs text-muted pt-3 pb-3">Resumen automático con cotización y ratios públicos (PER, ROE, deuda, dividendos…). No usa un chatbot de pago.</p>
-        <div className="flex gap-2 mb-3">
-          <input className="ui-input flex-1" value={symbol} onChange={(e) => setSymbol(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void run()} placeholder="Ej. AAPL, AMXL.MX" />
-          <button type="button" className="ui-btn ui-btn-primary" disabled={loading} onClick={() => void run()}>{loading ? "…" : "Analizar"}</button>
-        </div>
-        <div className="flex flex-wrap gap-2 mb-6">{SUGGESTIONS.map((s) => <button key={s} type="button" className="ui-chip" onClick={() => void run(s)}>{s}</button>)}</div>
-        {error ? <p className="text-sm text-danger text-center py-6">{error}</p> : null}
-        {loading ? <div className="space-y-3">{[1, 2, 3].map((i) => <div key={i} className="h-20 bg-card border border-border rounded-xl animate-pulse" />)}</div> : null}
+        <form className="flex gap-2 mb-3" onSubmit={(event) => { event.preventDefault(); void run(); }}>
+          <label className="sr-only" htmlFor="analysis-symbol">Ticker para analizar</label>
+          <input id="analysis-symbol" className="ui-input flex-1" value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="Ej. AAPL, AMXL.MX" />
+          <button type="submit" className="ui-btn ui-btn-primary" disabled={loading} aria-busy={loading}>
+            {loading ? "Analizando…" : "Analizar"}
+          </button>
+        </form>
+        <ScrollableChips
+          label="Tickers sugeridos"
+          options={SUGGESTIONS.map((item) => ({ value: item, label: item }))}
+          value={symbol.trim().toUpperCase()}
+          disabled={loading}
+          onChange={(suggestion) => void run(suggestion)}
+        />
+        <p className="sr-only" role="status" aria-live="polite">{loading ? "Analizando activo." : result ? "Análisis listo." : ""}</p>
+        {error ? <p className="text-sm text-danger text-center py-6" role="alert">{error}</p> : null}
+        {loading ? <div className="space-y-3" role="status" aria-label="Cargando análisis">{[1, 2, 3].map((i) => <div key={i} className="h-20 bg-card border border-border rounded-xl animate-pulse" />)}</div> : null}
         {result ? (
           <div className="space-y-3">
             <Link href={`/asset/${encodeURIComponent(result.symbol)}`} className="block bg-card border border-border rounded-xl p-3">
