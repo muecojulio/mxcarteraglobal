@@ -21,9 +21,9 @@ export function FibraSplitBar({ symbol, lastAmount }: { symbol: string; lastAmou
         </div>
       </div>
       {split.fiscalPct != null && split.capitalPct != null ? (
-        <div className="h-2.5 rounded-full bg-secondary overflow-hidden flex mb-2">
-          <div className="h-full bg-amber-500/90" style={{ width: `${split.fiscalPct}%` }} />
-          <div className="h-full bg-sky-500/80" style={{ width: `${split.capitalPct}%` }} />
+        <div className="bar-track h-2.5 rounded-full bg-secondary overflow-hidden flex mb-2">
+          <div className="bar-fill h-full bg-amber-500/90" style={{ width: `${split.fiscalPct}%` }} />
+          <div className="bar-fill h-full bg-sky-500/80" style={{ width: `${split.capitalPct}%`, animationDelay: "160ms" }} />
         </div>
       ) : null}
       <div className="flex gap-3 text-[10px] text-muted mb-2">

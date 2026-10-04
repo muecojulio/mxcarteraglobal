@@ -24,13 +24,13 @@ export default function InstallPage() {
   };
   return (
     <div className="flex flex-col min-h-full">
-      <header className="sticky top-0 z-40 bg-background/95 border-b border-border safe-top">
+      <header className="app-header safe-top">
         <div className="flex items-center gap-3 px-4 h-14 max-w-lg mx-auto">
           <Link href="/settings" className="text-primary text-sm font-medium">← Más</Link>
           <h1 className="text-lg font-bold">Instalar MX Cartera Global</h1>
         </div>
       </header>
-      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-6 space-y-6 pb-28">
+      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-6 space-y-6 pb-28 stagger">
         <section className="text-center space-y-2">
           <p className="text-2xl font-bold">Tu app en cualquier dispositivo</p>
           <p className="text-sm text-muted">iPhone · iPad · tablet · Android · computadora</p>

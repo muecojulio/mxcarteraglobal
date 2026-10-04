@@ -95,13 +95,13 @@ export default function DividendAnalysisPage() {
   for (let i = 1; i <= years; i++) projected = projected * (1 + divGrowth) + contribution * (1 + stockGrowth);
   return (
     <div className="flex flex-col min-h-full">
-      <header className="sticky top-0 z-40 bg-background/95 border-b border-border safe-top">
+      <header className="app-header safe-top">
         <div className="flex items-center gap-3 px-4 h-14 max-w-lg mx-auto">
           <Link href="/dividends" className="text-primary text-sm">← Divs</Link>
           <h1 className="text-lg font-bold">Ingreso por dividendos</h1>
         </div>
       </header>
-      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3">
+      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3 stagger">
         <p className="text-sm">Anual est. {formatMoney(total)} · meta {formatMoney(goal)} {loadingDivs ? "· cargando pagos…" : ""}</p>
         <MonthGrid amounts={months} />
         <input className="ui-input" type="number" value={goal} onChange={(e) => { const n = Number(e.target.value) || 0; setGoal(n); localStorage.setItem(DIV_GOAL_KEY, String(n)); }} />

@@ -21,16 +21,16 @@ export default function HomePage() {
   const usingReal = !!(indicesData?.usingRealData || quotesData?.usingRealData);
   return (
     <div className="flex flex-col min-h-full">
-      <header className="sticky top-0 z-40 bg-background/90 border-b border-border safe-top">
+      <header className="app-header safe-top">
         <div className="flex items-center justify-between px-4 h-14 max-w-lg mx-auto">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm">MP</div>
             <h1 className="text-lg font-bold tracking-tight">MX Cartera Global</h1>
           </div>
-          {usingReal ? <span className="text-[10px] font-medium bg-success/15 text-success px-2 py-0.5 rounded-full">EN VIVO</span> : null}
+          {usingReal ? <span className="live-badge text-[10px] font-medium bg-success/15 text-success px-2 py-0.5 rounded-full">EN VIVO</span> : null}
         </div>
       </header>
-      <main className="flex-1 px-4 py-4 max-w-lg mx-auto w-full space-y-6">
+      <main className="flex-1 px-4 py-4 max-w-lg mx-auto w-full space-y-6 stagger">
         <AssetSearch placeholder="Buscar acción, ETF o FIBRA (ticker o nombre)" />
         <section>
           <p className="text-muted text-sm">Mercados</p>

@@ -9,6 +9,7 @@ import PersistRoute from "@/components/PersistRoute";
 import { SecurityOnboarding } from "@/components/SecurityOnboarding";
 import LegalBanner from "@/components/LegalBanner";
 import { ToastProvider } from "@/components/Toast";
+import { UiMotionDefs } from "@/components/UiMotionDefs";
 
 // Usamos pila de fuentes del sistema para evitar dependencias de red en build/despliegue.
 const fontClasses = "font-sans";
@@ -58,6 +59,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         />
       </head>
       <body className="min-h-full flex flex-col bg-background text-foreground">
+        <UiMotionDefs />
         <ThemeProvider>
           <ToastProvider>
             <AppLock>

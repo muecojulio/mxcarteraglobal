@@ -42,10 +42,10 @@ export default function CalendarPage() {
   });
   return (
     <div className="flex flex-col min-h-full">
-      <header className="sticky top-0 z-40 bg-background/95 border-b border-border safe-top">
+      <header className="app-header safe-top">
         <div className="flex items-center px-4 h-14 max-w-lg mx-auto"><h1 className="text-lg font-bold">Calendario</h1></div>
       </header>
-      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3">
+      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3 stagger">
         <div className="flex gap-2"><input className="ui-input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /><input className="ui-input" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
         <input className="ui-input" placeholder="Buscar" value={search} onChange={(e) => setSearch(e.target.value)} />
         <div className="flex flex-wrap gap-1">{(["all", "earnings", "dividend", "ipo", "delisting"] as const).map((t) => <button key={t} type="button" className={filter === t ? "ui-chip ui-chip-active" : "ui-chip"} onClick={() => setFilter(t)}>{t === "all" ? "Todos" : TYPE_META[t].label}</button>)}</div>

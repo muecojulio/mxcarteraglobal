@@ -3,13 +3,13 @@ import Link from "next/link";
 export default function PrivacidadPage() {
   return (
     <div className="flex flex-col min-h-full">
-      <header className="sticky top-0 z-40 bg-background/95 border-b border-border safe-top">
+      <header className="app-header safe-top">
         <div className="flex items-center px-4 h-14 max-w-lg mx-auto gap-3">
           <Link href="/legal" className="ui-btn ui-btn-ghost text-sm px-3 min-h-12">Atrás</Link>
           <h1 className="text-lg font-bold">Aviso de privacidad</h1>
         </div>
       </header>
-      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 text-sm leading-relaxed space-y-4 text-muted">
+      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 text-sm leading-relaxed space-y-4 text-muted stagger">
         <p className="text-xs text-foreground">Borrador informativo para revisión. No sustituye un aviso notariado. Actualizado: 25 de septiembre de 2026.</p>
         <section className="space-y-2">
           <h2 className="text-foreground font-semibold">1. Responsable</h2>

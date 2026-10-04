@@ -7,12 +7,23 @@
   --touch-min: 52px; --touch-comfortable: 56px; --space-page: 1.35rem; --space-section: 1.75rem; --space-card: 1.2rem;
   --shadow-soft: 0 2px 12px rgba(51, 65, 85, 0.05); --shadow-nav: 0 -6px 28px rgba(51, 65, 85, 0.06);
   --content-max: 32rem; --content-max-tablet: 42rem; --content-max-desktop: 56rem;
+  /* Microinteracciones: resortes, duraciones y brillos reutilizables */
+  --spring-bouncy: cubic-bezier(.34, 1.56, .64, 1);
+  --spring-soft: cubic-bezier(.22, 1, .36, 1);
+  --spring-snap: cubic-bezier(.16, .84, .44, 1.18);
+  --dur-tap: 140ms; --dur-base: 240ms; --dur-slow: 460ms;
+  --sheen: linear-gradient(105deg, transparent 25%, rgba(255, 255, 255, .5) 50%, transparent 75%);
+  --sheen-soft: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, .28) 50%, transparent 70%);
+  --ink-shadow: rgba(18, 32, 29, .12);
 }
 @media (prefers-color-scheme: dark) {
   :root:not(.light) {
     --background: #141820; --foreground: #e2e8f0; --card: #1e2530; --card-foreground: #e2e8f0;
     --primary: #5cbcab; --primary-foreground: #141820; --secondary: #2a3342; --muted: #9aa5b8; --border: #323c4d;
     --success: #5fc4a0; --danger: #e8b0b0; --warning: #e8cb8e;
+    --ink-shadow: rgba(0, 0, 0, .45);
+    --sheen: linear-gradient(105deg, transparent 25%, rgba(255, 255, 255, .16) 50%, transparent 75%);
+    --sheen-soft: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, .1) 50%, transparent 70%);
   }
 }
 html.dark { --background: #141820; --foreground: #e2e8f0; --card: #1e2530; --primary: #5cbcab; --border: #323c4d; --success: #5fc4a0; --danger: #e8b0b0; }
@@ -29,19 +40,281 @@ html { scroll-behavior: smooth; }
 body { background: var(--background); color: var(--foreground); font-family: var(--font-sans), system-ui, sans-serif; line-height: 1.55; -webkit-tap-highlight-color: transparent; }
 .safe-top { padding-top: env(safe-area-inset-top); }
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
-.bg-card { border-radius: var(--radius-lg) !important; box-shadow: var(--shadow-soft); }
-.ui-btn { display: inline-flex; align-items: center; justify-content: center; min-height: var(--touch-comfortable); min-width: var(--touch-min); padding: .85rem 1.5rem; border-radius: var(--radius-full); font-weight: 600; border: none; cursor: pointer; transition: transform 180ms cubic-bezier(.22,1,.36,1), opacity 160ms cubic-bezier(.22,1,.36,1); }
-.ui-btn:active { transform: scale(.96); opacity: .92; }
-.ui-btn-primary { background: var(--primary); color: var(--primary-foreground); }
-.ui-btn-secondary { background: var(--secondary); color: var(--foreground); border: 1px solid var(--border); }
-.ui-btn-ghost { background: transparent; color: var(--foreground); box-shadow: none; border: 1px solid var(--border); }
-.ui-input { min-height: var(--touch-min); width: 100%; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--card); padding: .85rem 1.1rem; font-size: 1rem; color: var(--foreground); outline: none; }
-.ui-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 25%, transparent); }
-.ui-chip { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: .45rem 1.15rem; border-radius: var(--radius-full); font-size: .875rem; font-weight: 600; background: var(--secondary); color: var(--foreground); border: 1px solid transparent; }
-.ui-chip-active { background: color-mix(in srgb, var(--primary) 18%, transparent); color: var(--primary); border-color: color-mix(in srgb, var(--primary) 35%, transparent); }
-.ui-switch { --track-w: 52px; --track-h: 32px; --thumb: 26px; position: relative; display: inline-flex; align-items: center; width: var(--track-w); height: var(--track-h); min-width: 48px; min-height: 48px; border: none; background: transparent; cursor: pointer; }
-.ui-switch-track { width: var(--track-w); height: var(--track-h); border-radius: 9999px; background: var(--secondary); border: 1px solid var(--border); position: relative; }
-.ui-switch-thumb { position: absolute; top: 50%; left: 3px; width: var(--thumb); height: var(--thumb); border-radius: 9999px; background: var(--card); transform: translateY(-50%); transition: transform 220ms cubic-bezier(.22,1,.36,1); }
-.ui-switch[aria-checked="true"] .ui-switch-track { background: color-mix(in srgb, var(--primary) 55%, var(--secondary)); }
+.bg-card { border-radius: var(--radius-lg) !important; box-shadow: var(--shadow-soft); transition: box-shadow var(--dur-base) var(--spring-soft), transform var(--dur-base) var(--spring-bouncy), border-color var(--dur-base) linear; }
+
+/* ==========================================================================
+   MICROINTERACCIONES GLOBALES
+   El laboratorio dejó de ser una pestaña: los resortes, el táctil 3D, el
+   líquido y el barrido de escáner viven ahora en los componentes reales
+   (botones, pestañas, menús, barras, tarjetas y avisos).
+   ========================================================================== */
+
+/* --- Accesibilidad: foco siempre visible y cómodo ------------------------- */
+:where(a, button, input, select, textarea, [role="button"], [role="tab"], [role="switch"]):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 75%, transparent);
+  outline-offset: 2px;
+}
+
+/* --- 1. Botones: pulsación táctil 3D + destello --------------------------- */
+.ui-btn {
+  --btn-ledge: color-mix(in srgb, var(--primary) 55%, #06120f);
+  --btn-ledge-h: 4px;
+  position: relative; overflow: hidden; isolation: isolate;
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  min-height: var(--touch-comfortable); min-width: var(--touch-min);
+  padding: .85rem 1.5rem; border-radius: var(--radius-full);
+  font-weight: 600; border: none; cursor: pointer;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation; transform: translateZ(0);
+  transition: transform var(--dur-base) var(--spring-bouncy), box-shadow var(--dur-base) var(--spring-soft),
+              opacity var(--dur-tap) linear, background-color var(--dur-base) linear, color var(--dur-base) linear,
+              filter var(--dur-base) linear;
+}
+.ui-btn:not(:disabled) { box-shadow: 0 var(--btn-ledge-h) 0 var(--btn-ledge), 0 10px 22px var(--ink-shadow); }
+.ui-btn:disabled { opacity: .55; cursor: not-allowed; box-shadow: none; }
+.ui-btn > * { position: relative; z-index: 1; }
+.ui-btn::after { content: ""; position: absolute; inset: -20% -10%; background: var(--sheen); opacity: 0; transform: translateX(-130%) skewX(-12deg); pointer-events: none; }
+.ui-btn:not(:disabled):active { transform: translateY(var(--btn-ledge-h)) scale(.985); box-shadow: 0 0 0 var(--btn-ledge), 0 3px 8px var(--ink-shadow); }
+.ui-btn:not(:disabled):active::after { animation: ui-sheen var(--dur-slow) var(--spring-soft) both; }
+.ui-btn-primary { --btn-ledge: color-mix(in srgb, var(--primary) 62%, #04100c); background: var(--primary); color: var(--primary-foreground); }
+.ui-btn-secondary { --btn-ledge: color-mix(in srgb, var(--border) 58%, #7a6a52); background: var(--secondary); color: var(--foreground); border: 1px solid var(--border); }
+.ui-btn-ghost { --btn-ledge: var(--border); --btn-ledge-h: 3px; background: transparent; color: var(--foreground); }
+@keyframes ui-sheen {
+  0% { opacity: 0; transform: translateX(-130%) skewX(-12deg); }
+  35% { opacity: .9; }
+  100% { opacity: 0; transform: translateX(130%) skewX(-12deg); }
+}
+@media (hover: hover) and (pointer: fine) {
+  .ui-btn:not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 calc(var(--btn-ledge-h) + 2px) 0 var(--btn-ledge), 0 16px 28px var(--ink-shadow); }
+  .ui-btn:not(:disabled):hover:active { transform: translateY(var(--btn-ledge-h)) scale(.985); }
+}
+
+/* --- 2. Pestañas y filtros: rebote tipo resorte --------------------------- */
+.ui-chip {
+  position: relative; overflow: hidden;
+  display: inline-flex; align-items: center; justify-content: center; min-height: 44px;
+  padding: .45rem 1.15rem; border-radius: var(--radius-full);
+  font-size: .875rem; font-weight: 600; background: var(--secondary); color: var(--foreground);
+  border: 1px solid transparent; cursor: pointer;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation; transform: translateZ(0);
+  transition: transform var(--dur-base) var(--spring-bouncy), background-color var(--dur-base) var(--spring-soft),
+              color var(--dur-base) var(--spring-soft), border-color var(--dur-base) var(--spring-soft),
+              box-shadow var(--dur-base) var(--spring-soft);
+}
+.ui-chip::after { content: ""; position: absolute; inset: 0; background: var(--sheen-soft); opacity: 0; transform: translateX(-120%); pointer-events: none; }
+.ui-chip:active { transform: scale(.92); }
+.ui-chip:active::after { animation: ui-sheen var(--dur-base) var(--spring-soft) both; }
+.ui-chip-active {
+  background: color-mix(in srgb, var(--primary) 18%, transparent); color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 35%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
+  animation: ui-pop var(--dur-slow) var(--spring-bouncy);
+}
+@keyframes ui-pop {
+  0% { transform: scale(.93); }
+  40% { transform: scale(1.07); }
+  70% { transform: scale(.99); }
+  100% { transform: scale(1); }
+}
+
+/* --- 3. Pestañas segmentadas con indicador deslizante --------------------- */
+.ui-tabs {
+  position: relative; display: flex; gap: .25rem; width: 100%;
+  padding: .3rem; border-radius: var(--radius-full);
+  background: var(--secondary); border: 1px solid var(--border);
+}
+.ui-tabs-indicator {
+  position: absolute; top: .3rem; bottom: .3rem; left: .3rem; z-index: 0; border-radius: var(--radius-full);
+  background: var(--card); box-shadow: 0 2px 10px var(--ink-shadow);
+  width: calc((100% - .6rem - (var(--ui-tabs-count, 3) - 1) * .25rem) / var(--ui-tabs-count, 3));
+  transform: translateX(calc(var(--ui-tabs-index, 0) * (100% + .25rem)));
+  transition: transform var(--dur-base) var(--spring-bouncy), width var(--dur-base) var(--spring-bouncy);
+  will-change: transform;
+}
+.ui-tab {
+  position: relative; z-index: 1; flex: 1 1 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px; padding: 0 .75rem; border: none; background: transparent;
+  border-radius: var(--radius-full); font-size: .875rem; font-weight: 600; color: var(--muted);
+  cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  transition: color var(--dur-base) var(--spring-soft), transform var(--dur-base) var(--spring-bouncy);
+}
+.ui-tab:active { transform: scale(.93); }
+.ui-tab[aria-selected="true"] { color: var(--primary); }
+
+/* --- 4. Menú inferior: pastilla deslizante y rebote al tocar -------------- */
+.app-nav {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+  box-shadow: var(--shadow-nav);
+}
+@supports ((-webkit-backdrop-filter: blur(6px)) or (backdrop-filter: blur(6px))) {
+  .app-nav {
+    background: color-mix(in srgb, var(--card) 92%, transparent);
+    -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
+  }
+}
+.app-nav-grid { position: relative; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); max-width: 32rem; margin: 0 auto; }
+.app-nav-pill {
+  position: absolute; top: .45rem; bottom: .45rem; left: 0; width: 20%; border-radius: 9999px;
+  background: color-mix(in srgb, var(--primary) 13%, transparent);
+  transition: transform var(--dur-base) var(--spring-bouncy);
+  will-change: transform;
+}
+.app-nav-link {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .3rem;
+  min-height: 56px; font-size: .6875rem; font-weight: 600; letter-spacing: .01em;
+  color: var(--muted); text-decoration: none;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  transition: color var(--dur-base) var(--spring-soft), transform var(--dur-base) var(--spring-bouncy);
+}
+.app-nav-link:active { transform: scale(.88) translateY(2px); }
+.app-nav-link[aria-current="page"] { color: var(--primary); }
+.app-nav-dot {
+  width: 6px; height: 6px; border-radius: 9999px; background: currentColor; opacity: .3;
+  transition: transform var(--dur-base) var(--spring-bouncy), opacity var(--dur-base) var(--spring-soft), box-shadow var(--dur-base) var(--spring-soft);
+}
+.app-nav-link[aria-current="page"] .app-nav-dot { opacity: 1; transform: scale(1.45); box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 15%, transparent); }
+.app-nav-bounce { animation: ui-nav-bounce 520ms var(--spring-bouncy); }
+@keyframes ui-nav-bounce {
+  0% { transform: translateY(0) scale(1); }
+  30% { transform: translateY(-4px) scale(1.06); }
+  60% { transform: translateY(1px) scale(.98); }
+  100% { transform: none; }
+}
+
+/* --- 5. Barras superiores: se elevan al hacer scroll ---------------------- */
+.app-header {
+  position: sticky; top: 0; z-index: 40;
+  background: var(--background);
+  border-bottom: 1px solid var(--border);
+}
+@supports ((-webkit-backdrop-filter: blur(6px)) or (backdrop-filter: blur(6px))) {
+  .app-header {
+    background: color-mix(in srgb, var(--background) 88%, transparent);
+    -webkit-backdrop-filter: blur(12px) saturate(1.15); backdrop-filter: blur(12px) saturate(1.15);
+  }
+}
+.app-header::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--primary) 45%, transparent), transparent);
+  opacity: 0; transition: opacity var(--dur-slow) var(--spring-soft);
+}
+.app-header:focus-within::after { opacity: 1; }
+@supports (animation-timeline: scroll()) {
+  .app-header { animation: ui-header-elevate linear both; animation-timeline: scroll(root block); animation-range: 0 72px; }
+}
+@keyframes ui-header-elevate {
+  from { box-shadow: 0 0 0 rgba(18, 32, 29, 0); }
+  to { box-shadow: 0 10px 26px var(--ink-shadow); }
+}
+
+/* --- 6. Barras de progreso: crecen con resorte y se escanean ------------- */
+.bar-track { position: relative; overflow: hidden; border-radius: 9999px; }
+.bar-fill {
+  position: relative; transform-origin: left center;
+  animation: ui-bar-grow 720ms var(--spring-soft) both;
+  transition: width var(--dur-slow) var(--spring-bouncy);
+}
+.bar-fill::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .55), transparent);
+  transform: translateX(-100%);
+  animation: ui-bar-scan 1100ms var(--spring-soft) 420ms both;
+}
+@keyframes ui-bar-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes ui-bar-scan { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+
+/* --- 7. Tarjetas y enlaces: respuesta al tacto --------------------------- */
+.tap {
+  transition: transform var(--dur-base) var(--spring-bouncy), box-shadow var(--dur-base) var(--spring-soft), border-color var(--dur-base) linear;
+  -webkit-tap-highlight-color: transparent;
+}
+.tap:active { transform: scale(.975); }
+a.bg-card { -webkit-tap-highlight-color: transparent; }
+a.bg-card:active { transform: scale(.978); }
+@media (hover: hover) and (pointer: fine) {
+  a.bg-card:hover { transform: translateY(-2px); box-shadow: 0 12px 26px var(--ink-shadow); }
+}
+
+/* --- 8. Interruptor líquido (membrana goo + cuello elástico) ------------- */
+.ui-switch {
+  --track-w: 54px; --track-h: 32px; --thumb: 26px;
+  position: relative; display: inline-flex; align-items: center;
+  width: var(--track-w); height: var(--track-h); min-width: 48px; min-height: 48px;
+  border: none; background: transparent; cursor: pointer;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  filter: url(#ui-goo);
+}
+.ui-switch-track {
+  position: relative; width: var(--track-w); height: var(--track-h); border-radius: 9999px;
+  background: var(--secondary); border: 1px solid var(--border);
+  transition: background-color var(--dur-base) var(--spring-soft), border-color var(--dur-base) var(--spring-soft);
+}
+.ui-switch-thumb {
+  position: absolute; top: 50%; left: 3px; width: var(--thumb); height: var(--thumb);
+  border-radius: 9999px; background: var(--card); transform: translateY(-50%);
+  box-shadow: 0 2px 6px var(--ink-shadow);
+  transition: transform var(--dur-base) var(--spring-bouncy), width var(--dur-base) var(--spring-bouncy);
+}
+.ui-switch[aria-checked="true"] .ui-switch-track { background: color-mix(in srgb, var(--primary) 58%, var(--secondary)); border-color: color-mix(in srgb, var(--primary) 55%, var(--border)); }
 .ui-switch[aria-checked="true"] .ui-switch-thumb { transform: translateY(-50%) translateX(20px); }
-@media (hover: hover) and (pointer: fine) { .ui-btn:hover { transform: translateY(-1px); } }
+.ui-switch:active .ui-switch-thumb { width: calc(var(--thumb) + 7px); }
+.ui-switch[aria-checked="true"]:active .ui-switch-thumb { transform: translateY(-50%) translateX(13px); }
+
+/* --- 9. Campos: enfoque elástico ----------------------------------------- */
+.ui-input { transition: border-color var(--dur-base) var(--spring-soft), box-shadow var(--dur-base) var(--spring-soft), transform var(--dur-base) var(--spring-bouncy); }
+.ui-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 25%, transparent); transform: translateY(-1px); }
+
+/* --- 10. Avisos, sellos y paneles desplegables --------------------------- */
+.toast-pop { animation: ui-toast-in 440ms var(--spring-bouncy) both; }
+@keyframes ui-toast-in {
+  0% { opacity: 0; transform: translateY(-14px) scale(.94); }
+  60% { opacity: 1; transform: translateY(2px) scale(1.01); }
+  100% { opacity: 1; transform: none; }
+}
+.live-badge { display: inline-flex; align-items: center; gap: .35rem; }
+.live-badge::before {
+  content: ""; width: 6px; height: 6px; border-radius: 9999px; background: currentColor;
+  animation: ui-live-pulse 1.9s var(--spring-soft) infinite;
+}
+@keyframes ui-live-pulse {
+  0% { transform: scale(.8); box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 45%, transparent); }
+  70% { transform: scale(1); box-shadow: 0 0 0 6px transparent; }
+  100% { transform: scale(.8); box-shadow: 0 0 0 0 transparent; }
+}
+.elastic-open { transform-origin: top center; animation: ui-elastic-open var(--dur-slow) var(--spring-soft) both; }
+@keyframes ui-elastic-open {
+  from { opacity: 0; transform: translateY(-8px) scaleY(.96); }
+  to { opacity: 1; transform: none; }
+}
+
+/* --- 11. Entrada de páginas y secciones ---------------------------------- */
+.reveal { animation: ui-reveal var(--dur-slow) var(--spring-soft) both; }
+.stagger > * { animation: ui-reveal var(--dur-slow) var(--spring-soft) both; }
+.stagger > *:nth-child(1) { animation-delay: 20ms; }
+.stagger > *:nth-child(2) { animation-delay: 60ms; }
+.stagger > *:nth-child(3) { animation-delay: 100ms; }
+.stagger > *:nth-child(4) { animation-delay: 140ms; }
+.stagger > *:nth-child(5) { animation-delay: 180ms; }
+.stagger > *:nth-child(6) { animation-delay: 220ms; }
+.stagger > *:nth-child(7) { animation-delay: 260ms; }
+.stagger > *:nth-child(8) { animation-delay: 300ms; }
+.stagger > *:nth-child(n+9) { animation-delay: 340ms; }
+@keyframes ui-reveal {
+  from { opacity: 0; transform: translateY(10px) scale(.995); }
+  to { opacity: 1; transform: none; }
+}
+
+/* --- 12. Respeta a quien prefiere menos movimiento ----------------------- */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .ui-btn:not(:disabled):active, .ui-chip:active, .tap:active, a.bg-card:active, .app-nav-link:active { transform: none; }
+}

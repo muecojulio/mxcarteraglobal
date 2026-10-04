@@ -35,15 +35,15 @@ export default function SettingsPage() {
   if (!mounted) return <div className="px-4 py-8 text-sm text-muted">Cargando…</div>;
   return (
     <div className="flex flex-col min-h-full">
-      <header className="sticky top-0 z-40 bg-background/95 border-b border-border safe-top">
+      <header className="app-header safe-top">
         <div className="flex items-center px-4 h-14 max-w-lg mx-auto"><h1 className="text-lg font-bold">Configuración</h1></div>
       </header>
-      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-6 pb-10">
+      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-6 pb-10 stagger">
         <PortfolioBackup /><CloudVaultPanel /><TaxEstimator />
         <section>
           <h2 className="text-xs font-semibold text-muted uppercase mb-2">Apariencia</h2>
           <div className="space-y-2">{THEME_OPTIONS.map((o) => (
-            <button key={o.key} type="button" className={`w-full text-left bg-card border rounded-xl p-3 ${theme === o.key ? "border-primary" : "border-border"}`} onClick={() => { setTheme(o.key); applyTheme(o.key); }}>
+            <button key={o.key} type="button" className={`tap w-full text-left bg-card border rounded-xl p-3 ${theme === o.key ? "border-primary" : "border-border"}`} onClick={() => { setTheme(o.key); applyTheme(o.key); }}>
               <p className="font-medium text-sm">{o.label}</p><p className="text-xs text-muted">{o.desc}</p>
             </button>
           ))}</div>
@@ -73,7 +73,23 @@ export default function SettingsPage() {
               <>
                 <button type="button" className="ui-btn w-full" onClick={() => lockNow()}>Bloquear ahora</button>
                 {canUseWebAuthn() ? <button type="button" className="ui-btn w-full" onClick={async () => { const ok = await registerBiometric(); if (ok) { setBioPreferred(true); setBioOn(true); } }}>Registrar biometría</button> : null}
-                <p className="text-xs text-muted">Biometría {bioOn ? "preferida" : "apagada"}</p>
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-border px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">Entrar con Face ID / huella</p>
+                    <p className="text-[11px] text-muted">{canUseWebAuthn() ? "Pide biometría al abrir la app" : "No disponible en este dispositivo"}</p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={bioOn}
+                    aria-label="Entrar con Face ID o huella"
+                    className="ui-switch shrink-0"
+                    onClick={() => { const next = !bioOn; setBioPreferred(next); setBioOn(next); setLockMsg(next ? "Biometría activada al abrir." : "Biometría desactivada."); }}
+                  >
+                    <span className="ui-switch-track" aria-hidden="true" />
+                    <span className="ui-switch-thumb" aria-hidden="true" />
+                  </button>
+                </div>
                 <button type="button" className="text-danger text-sm" onClick={() => { disableLock(); setLockOn(false); setRecoveryShown(""); }}>Quitar candado</button>
               </>
             )}

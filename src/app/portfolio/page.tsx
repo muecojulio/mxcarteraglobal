@@ -60,13 +60,13 @@ export default function PortfolioPage() {
   });
   return (
     <div className="flex flex-col min-h-full">
-      <header className="sticky top-0 z-40 bg-background/95 border-b border-border safe-top">
+      <header className="app-header safe-top">
         <div className="flex items-center justify-between px-4 h-14 max-w-lg mx-auto">
           <h1 className="text-lg font-bold">Cartera</h1>
           <LiveBadge live={!!data?.usingRealData} />
         </div>
       </header>
-      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3">
+      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3 stagger">
         <p className="text-2xl font-bold">{formatMoney(totalValue, displayCurrency)}</p>
         <p className={totalPL >= 0 ? "text-success text-sm" : "text-danger text-sm"}>{formatMoney(totalPL, displayCurrency)} ({formatPercent(totalCost ? (totalPL / totalCost) * 100 : 0)})</p>
         <PortfolioPeriodChart holdings={positions.map((p) => ({ symbol: p.symbol, quantity: p.quantity }))} displayCurrency={displayCurrency} />
@@ -86,7 +86,7 @@ export default function PortfolioPage() {
         ))}
         <button type="button" className="ui-btn ui-btn-primary w-full" onClick={() => setShowAdd((v) => !v)}>{showAdd ? "Cerrar" : "Agregar"}</button>
         {showAdd ? (
-          <form className="space-y-2" onSubmit={(e) => {
+          <form className="elastic-open space-y-2" onSubmit={(e) => {
             e.preventDefault();
             const symbol = form.symbol.trim().toUpperCase();
             const quantity = Number(form.quantity); const avgCost = Number(form.avgCost);

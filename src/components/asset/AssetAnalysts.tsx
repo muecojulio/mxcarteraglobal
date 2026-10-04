@@ -47,7 +47,7 @@ export function AssetAnalysts({
           {rec && buyPct != null ? (
             <>
               <div className="flex items-center justify-between mb-2"><span className="text-sm">Comprar</span><span className="text-sm font-semibold">{buyPct}%</span></div>
-              <div className="h-2 rounded-full bg-secondary overflow-hidden mb-3"><div className="h-full bg-emerald-500 rounded-full" style={{ width: `${buyPct}%` }} /></div>
+              <div className="bar-track h-2 rounded-full bg-secondary overflow-hidden mb-3"><div className="bar-fill h-full bg-emerald-500 rounded-full" style={{ width: `${buyPct}%` }} /></div>
               <p className="text-[11px] text-muted">Strong buy {rec.strongBuy} · Buy {rec.buy} · Hold {rec.hold} · Sell {rec.sell + rec.strongSell}.</p>
             </>
           ) : null}

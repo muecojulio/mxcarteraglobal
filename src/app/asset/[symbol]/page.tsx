@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { pushRecentSymbol } from "@/lib/persist";
@@ -30,6 +30,7 @@ type AssetPayload = {
   dividends: Array<{ date: string; amount: number }>;
   assetType?: string;
 };
+const TABS = ["resumen", "divs", "fiscal"] as const;
 export default function AssetPage() {
   const params = useParams<{ symbol: string }>();
   const router = useRouter();
@@ -59,12 +60,13 @@ export default function AssetPage() {
   const chartTimes = useMemo(() => history.map((h) => h.t), [history]);
   const chartPositive = closes.length >= 2 ? closes[closes.length - 1] >= closes[0] : (quote?.changePercent ?? 0) >= 0;
   const fibra = getFibraMeta(symbol);
+  const tabsStyle = { "--ui-tabs-count": TABS.length, "--ui-tabs-index": Math.max(0, TABS.indexOf(tab)) } as CSSProperties;
   const lastDiv = data?.dividends?.[0]?.amount ?? 0;
   const spark = closes.length > 1 ? closes : (data?.dividends || []).slice(0, 24).map((d) => d.amount).reverse();
   const name = data?.profile?.name || quote?.name || raw;
   return (
     <div className="flex flex-col min-h-full">
-      <header className="sticky top-0 z-40 bg-background/95 border-b border-border safe-top">
+      <header className="app-header safe-top">
         <div className="flex items-center gap-2 px-3 h-14 max-w-lg mx-auto">
           <button type="button" onClick={() => router.back()} className="w-9 h-9 text-muted text-lg" aria-label="Volver">‹</button>
           <div className="flex-1 min-w-0">
@@ -73,14 +75,19 @@ export default function AssetPage() {
           </div>
         </div>
       </header>
-      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3">
+      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3 stagger">
         {loading ? <p className="text-sm text-muted">Cargando…</p> : null}
         {error ? <p className="text-danger text-sm">{error}</p> : null}
         <p className="text-2xl font-bold">{quote ? formatMxn(toMxn(quote.price, quote.currency, fx?.usdMxn ?? null)) : "—"}</p>
         {quote ? <p className={(quote.changePercent ?? 0) >= 0 ? "text-success text-sm" : "text-danger text-sm"}>{fmtPct(quote.changePercent ?? 0)}</p> : null}
         <div className="flex flex-wrap gap-1">{RANGES.map((r) => <button key={r} type="button" className={range === r ? "ui-chip ui-chip-active" : "ui-chip"} onClick={() => setRange(r)}>{r}</button>)}</div>
         {history.length > 1 ? <AssetCandles history={history} /> : spark.length > 1 ? <Sparkline data={spark} times={chartTimes} positive={chartPositive} formatValue={(n) => formatMxn(toMxn(n, quote?.currency || "USD", fx?.usdMxn ?? null))} /> : null}
-        <div className="flex gap-2">{(["resumen", "divs", "fiscal"] as const).map((t) => <button key={t} type="button" className={tab === t ? "ui-chip ui-chip-active" : "ui-chip"} onClick={() => setTab(t)}>{t}</button>)}</div>
+        <div className="ui-tabs" role="tablist" aria-label="Vistas del activo" style={tabsStyle}>
+          <span className="ui-tabs-indicator" aria-hidden="true" />
+          {TABS.map((t) => (
+            <button key={t} type="button" role="tab" aria-selected={tab === t} className="ui-tab" onClick={() => setTab(t)}>{t}</button>
+          ))}
+        </div>
         {tab === "resumen" && (
           <>
             <AssetStats quote={quote} stats={data?.stats} symbol={symbol} assetType={data?.assetType} />

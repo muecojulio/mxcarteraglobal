@@ -9,7 +9,7 @@ export function Donut({
   const c = 2 * Math.PI * r;
   let offset = 0;
   return (
-    <div className="relative w-48 h-48 mx-auto">
+    <div className="reveal relative w-48 h-48 mx-auto">
       <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
         {slices.map((sl) => {
           const pct = sl.value / total;

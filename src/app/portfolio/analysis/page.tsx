@@ -52,13 +52,13 @@ export default function PortfolioAnalysisPage() {
   const eta = yearsToGoal(total, goal, growth, contribution);
   return (
     <div className="flex flex-col min-h-full">
-      <header className="sticky top-0 z-40 bg-background/95 border-b border-border safe-top">
+      <header className="app-header safe-top">
         <div className="flex items-center gap-3 px-4 h-14 max-w-lg mx-auto">
           <Link href="/portfolio" className="text-primary text-sm">← Cartera</Link>
           <h1 className="text-lg font-bold">Análisis</h1>
         </div>
       </header>
-      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3">
+      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3 stagger">
         <p className="text-sm">Valor {formatMoney(total, "MXN")} · meta {formatMoney(goal, "MXN")}</p>
         {eta !== Infinity ? <p className="text-xs text-muted">Años a la meta ≈ {eta}</p> : <p className="text-xs text-muted">La meta no se alcanza con estos supuestos.</p>}
         <Donut slices={rows.map((r) => ({ label: r.symbol, value: r.value, color: r.color }))} />

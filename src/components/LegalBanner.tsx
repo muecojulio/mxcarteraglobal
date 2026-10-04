@@ -8,7 +8,7 @@ export default function LegalBanner() {
   if (!show) return null;
   return (
     <div className="fixed bottom-20 inset-x-0 z-40 px-4">
-      <div className="max-w-lg mx-auto bg-card border border-border rounded-2xl p-3 text-xs space-y-2">
+      <div className="elastic-open max-w-lg mx-auto bg-card border border-border rounded-2xl p-3 text-xs space-y-2">
         <p>MX Cartera Global no es casa de bolsa ni asesoría. Puedes perder dinero.</p>
         <div className="flex gap-2">
           <Link href="/legal" className="underline">Leer avisos</Link>

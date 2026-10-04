@@ -32,7 +32,7 @@ export function AssetDividendList({
         return (
           <div key={`${d.date}-${i}`} className="mb-3">
             <div className="flex justify-between text-sm"><span>{d.date}</span><span className="font-medium">{fmt(d.amount, 4)}</span></div>
-            <div className="h-1.5 rounded-full bg-secondary overflow-hidden mt-1"><div className="h-full bg-primary" style={{ width: `${pct}%` }} /></div>
+            <div className="bar-track h-1.5 rounded-full bg-secondary overflow-hidden mt-1"><div className="bar-fill h-full bg-primary rounded-full" style={{ width: `${pct}%` }} /></div>
             {split?.fiscal != null ? <p className="text-[10px] text-muted">fiscal {fmt(split.fiscal, 4)} · capital {split.capital != null ? fmt(split.capital, 4) : "—"}</p> : null}
           </div>
         );

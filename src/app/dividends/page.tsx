@@ -21,13 +21,13 @@ export default function DividendsPage() {
   const { fx } = useUsdMxn();
   return (
     <div className="flex flex-col min-h-full">
-      <header className="sticky top-0 z-40 bg-background/95 border-b border-border safe-top">
+      <header className="app-header safe-top">
         <div className="flex items-center justify-between px-4 h-14 max-w-lg mx-auto">
           <h1 className="text-lg font-bold">Dividendos</h1>
           <Link href="/dividends/analysis" className="text-primary text-sm">Análisis</Link>
         </div>
       </header>
-      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3">
+      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3 stagger">
         <h2 className="text-xs font-semibold text-muted uppercase">Destacados ZIP</h2>
         {FEATURED.map((f) => {
           const q = data?.quotes.find((x) => x.symbol.toUpperCase() === f.symbol.toUpperCase());

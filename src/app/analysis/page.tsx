@@ -28,10 +28,10 @@ export default function AnalysisPage() {
   };
   return (
     <div className="flex flex-col min-h-full">
-      <header className="sticky top-0 z-40 bg-background/95 border-b border-border safe-top">
+      <header className="app-header safe-top">
         <div className="flex items-center px-4 h-14 max-w-lg mx-auto"><h1 className="text-lg font-bold">Análisis</h1></div>
       </header>
-      <main className="flex-1 max-w-lg mx-auto w-full px-4 pb-10">
+      <main className="flex-1 max-w-lg mx-auto w-full px-4 pb-10 stagger">
         <p className="text-xs text-muted pt-3 pb-3">Resumen automático con cotización y ratios públicos (PER, ROE, deuda, dividendos…). No usa un chatbot de pago.</p>
         <div className="flex gap-2 mb-3">
           <input className="ui-input flex-1" value={symbol} onChange={(e) => setSymbol(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void run()} placeholder="Ej. AAPL, AMXL.MX" />

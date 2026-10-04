@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 const ITEMS = [
   { href: "/", label: "Inicio" },
   { href: "/portfolio", label: "Cartera" },
@@ -10,14 +11,37 @@ const ITEMS = [
 ];
 export default function BottomNav() {
   const path = usePathname() || "/";
+  const router = useRouter();
+  const [bumped, setBumped] = useState<string | null>(null);
+  const activeIndex = Math.max(
+    0,
+    ITEMS.findIndex((item) => (item.href === "/" ? path === "/" : path.startsWith(item.href))),
+  );
+  useEffect(() => {
+    if (!bumped) return;
+    const timer = window.setTimeout(() => setBumped(null), 560);
+    return () => window.clearTimeout(timer);
+  }, [bumped]);
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-50 border-t border-border bg-card/95 safe-bottom">
-      <div className="max-w-lg mx-auto grid grid-cols-5">
+    <nav className="app-nav safe-bottom" aria-label="Navegación principal">
+      <div className="app-nav-grid">
+        <span className="app-nav-pill" aria-hidden="true" style={{ transform: `translateX(${activeIndex * 100}%)` }} />
         {ITEMS.map((item) => {
           const active = item.href === "/" ? path === "/" : path.startsWith(item.href);
           return (
-            <Link key={item.href} href={item.href} className={`flex items-center justify-center text-xs font-semibold min-h-12 ${active ? "text-primary" : "text-muted"}`}>
-              {item.label}
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-current={active ? "page" : undefined}
+              className={`app-nav-link${bumped === item.href ? " app-nav-bounce" : ""}`}
+              onClick={() => {
+                setBumped(item.href);
+                // Pre-carga la ruta para que el cambio se sienta inmediato en el toque.
+                router.prefetch(item.href);
+              }}
+            >
+              <span className="app-nav-dot" aria-hidden="true" />
+              <span>{item.label}</span>
             </Link>
           );
         })}

@@ -32,10 +32,10 @@ export default function IpoPage() {
   const visible = useMemo(() => ipos.filter((it) => !search || `${it.symbol || ""} ${it.name}`.toUpperCase().includes(search.toUpperCase())), [ipos, search]);
   return (
     <div className="flex flex-col min-h-full">
-      <header className="sticky top-0 z-40 bg-background/95 border-b border-border safe-top">
+      <header className="app-header safe-top">
         <div className="flex items-center px-4 h-14 max-w-lg mx-auto"><h1 className="text-lg font-bold">IPOs</h1></div>
       </header>
-      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3">
+      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3 stagger">
         <input className="ui-input" placeholder="Buscar" value={search} onChange={(e) => setSearch(e.target.value)} />
         <div className="flex flex-wrap gap-1">{(["all", "expected", "filed", "priced"] as const).map((s) => <button key={s} type="button" className={status === s ? "ui-chip ui-chip-active" : "ui-chip"} onClick={() => setStatus(s)}>{s === "all" ? "Todos" : STATUS_LABEL[s]}</button>)}</div>
         <button type="button" className="ui-btn ui-btn-primary w-full" onClick={() => void load()}>{loading ? "Cargando…" : "Actualizar"}</button>
