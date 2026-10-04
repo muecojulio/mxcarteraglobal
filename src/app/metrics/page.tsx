@@ -1,6 +1,8 @@
 "use client";
 import { useCallback, useState } from "react";
 import Link from "next/link";
+import { ScrollableChips } from "@/components/ui/ScrollableChips";
+import { CollapsiblePanel } from "@/components/ui/CollapsiblePanel";
 type Row = { symbol: string; name: string; type?: string; region?: string; pe: number | null; peg: number | null; pb: number | null; roe: number | null; divYieldPct: number | null; undervalued: boolean | null };
 type Filters = { type: "all" | "stock" | "etf"; peMax: string; pegMax: string; pbMax: string; roeMin: string; undervalued: boolean };
 const DEFAULT: Filters = { type: "all", peMax: "15", pegMax: "1", pbMax: "1.5", roeMin: "10", undervalued: false };
@@ -42,19 +44,34 @@ export default function MetricsPage() {
         <div className="flex items-center px-4 h-14 max-w-lg mx-auto"><h1 className="text-lg font-bold">Métricas</h1></div>
       </header>
       <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3">
-        <input className="ui-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tickers separados por coma" />
-        <button type="button" className="ui-btn ui-btn-ghost w-full" onClick={() => setShowFilters((v) => !v)}>{showFilters ? "Ocultar filtros" : "Filtros ZIP"}</button>
-        {showFilters ? (
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <label>P/E máx<input className="ui-input" value={filters.peMax} onChange={(e) => setFilters({ ...filters, peMax: e.target.value })} /></label>
-            <label>PEG máx<input className="ui-input" value={filters.pegMax} onChange={(e) => setFilters({ ...filters, pegMax: e.target.value })} /></label>
-            <label>P/B máx<input className="ui-input" value={filters.pbMax} onChange={(e) => setFilters({ ...filters, pbMax: e.target.value })} /></label>
-            <label>ROE mín<input className="ui-input" value={filters.roeMin} onChange={(e) => setFilters({ ...filters, roeMin: e.target.value })} /></label>
-          </div>
-        ) : null}
-        <div className="flex gap-2">{(["all", "stock", "etf"] as const).map((t) => <button key={t} type="button" className={filters.type === t ? "ui-chip ui-chip-active" : "ui-chip"} onClick={() => setFilters({ ...filters, type: t })}>{t}</button>)}</div>
-        <button type="button" className="ui-btn ui-btn-primary w-full" onClick={() => void run()}>{loading ? "Cargando…" : "Filtrar"}</button>
-        {error ? <p className="text-danger text-sm">{error}</p> : null}
+        <label className="sr-only" htmlFor="metrics-symbols">Tickers separados por coma</label>
+        <input id="metrics-symbols" className="ui-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tickers separados por coma" />
+        <button
+          id="metrics-filter-toggle"
+          type="button"
+          className="ui-btn ui-btn-ghost w-full"
+          aria-expanded={showFilters}
+          aria-controls="metrics-filter-panel"
+          onClick={() => setShowFilters((v) => !v)}
+        >
+          {showFilters ? "Ocultar filtros" : "Mostrar filtros"}
+        </button>
+        <CollapsiblePanel id="metrics-filter-panel" labelledBy="metrics-filter-toggle" open={showFilters} className="grid grid-cols-2 gap-2 text-xs">
+          <label>P/E máx<input className="ui-input mt-1" inputMode="decimal" value={filters.peMax} onChange={(e) => setFilters({ ...filters, peMax: e.target.value })} /></label>
+          <label>PEG máx<input className="ui-input mt-1" inputMode="decimal" value={filters.pegMax} onChange={(e) => setFilters({ ...filters, pegMax: e.target.value })} /></label>
+          <label>P/B máx<input className="ui-input mt-1" inputMode="decimal" value={filters.pbMax} onChange={(e) => setFilters({ ...filters, pbMax: e.target.value })} /></label>
+          <label>ROE mín<input className="ui-input mt-1" inputMode="decimal" value={filters.roeMin} onChange={(e) => setFilters({ ...filters, roeMin: e.target.value })} /></label>
+        </CollapsiblePanel>
+        <ScrollableChips
+          label="Tipo de instrumento"
+          options={(["all", "stock", "etf"] as const).map((item) => ({ value: item, label: item === "all" ? "Todos" : item === "stock" ? "Acciones" : "ETF" }))}
+          value={filters.type}
+          onChange={(type) => setFilters({ ...filters, type })}
+        />
+        <button type="button" className="ui-btn ui-btn-primary w-full" disabled={loading} aria-busy={loading} onClick={() => void run()}>
+          {loading ? "Filtrando…" : "Filtrar"}
+        </button>
+        {error ? <p className="text-danger text-sm" role="alert">{error}</p> : null}
         {results.map((r) => (
           <Link key={r.symbol} href={`/asset/${encodeURIComponent(r.symbol)}`} className="block bg-card border border-border rounded-xl p-3">
             <p className="font-semibold text-sm">{r.symbol} · {r.name}</p>

@@ -6,7 +6,7 @@ Desplegable directamente en **Vercel** sin pasos adicionales.
 
 ## Requisitos
 
-- Node.js **20 o superior**
+- Node.js **24.x** (alineado con el runtime actual de Vercel)
 
 ```bash
 npm install
@@ -34,4 +34,4 @@ npm run dev
 - No hay base SQL: no se aplican índices relacionales. Ver `docs/DATOS_E_INDICES.md`.
 - Aviso de privacidad en `/legal/privacidad` (borrador LFPDPPP).
 - PWA lista con `public/manifest.webmanifest`, `public/sw.js` e iconos generados.
-- Middleware de rate limit y validación de origen en `src/middleware.ts` (compatible con despliegue serverless de Vercel).
+- Proxy de rate limit y validación de origen en `src/proxy.ts` (convención actual de Next.js y compatible con Vercel).

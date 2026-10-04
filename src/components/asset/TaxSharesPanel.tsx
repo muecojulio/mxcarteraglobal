@@ -18,7 +18,9 @@ export function TaxSharesPanel({
     <section className="bg-card rounded-xl border border-border p-4 mb-4">
       <h2 className="text-sm font-semibold mb-2">Impuestos (MX · orientativo)</h2>
       <p className="text-xs text-muted mb-3">Cálculo sobre acciones enteras que indiques.</p>
-      <input className="ui-input" type="number" min={1} value={shares} onChange={(e) => setShares(Number(e.target.value) || 0)} />
+      <label className="block space-y-1 text-xs font-medium" htmlFor={`tax-shares-${symbol}`}>Número de títulos
+        <input id={`tax-shares-${symbol}`} className="ui-input" type="number" min={1} step="1" inputMode="numeric" value={shares} onChange={(e) => setShares(Number(e.target.value) || 0)} />
+      </label>
       {with8 ? <p className="text-sm mt-2">Con W-8BEN neto ≈ {formatMxn(with8.netApprox)}</p> : null}
       {no8 ? <p className="text-xs text-muted">Sin W-8BEN neto ≈ {formatMxn(no8.netApprox)}</p> : null}
       <p className="text-[11px] text-muted mt-2">Solo fines educativos. No es asesoría fiscal.</p>

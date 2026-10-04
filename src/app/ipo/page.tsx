@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useUsdMxn, formatMxn } from "@/lib/fx";
+import { ScrollableChips } from "@/components/ui/ScrollableChips";
 type IpoItem = { date: string; symbol?: string; name: string; exchange?: string; price?: string; status?: string; numberOfShares?: number; totalSharesValue?: number };
 const STATUS_LABEL: Record<string, string> = { expected: "Esperado", filed: "Registrado", priced: "Precio fijado", withdrawn: "Retirado" };
 function formatDay(iso: string) { try { return new Date(iso + "T12:00:00").toLocaleDateString("es-MX", { weekday: "short", day: "numeric", month: "short", year: "numeric" }); } catch { return iso; } }
@@ -28,7 +29,10 @@ export default function IpoPage() {
     } catch (e) { setError(e instanceof Error ? e.message : "Error"); setIpos([]); }
     finally { setLoading(false); }
   }, [status]);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => { void load(); });
+    return () => window.cancelAnimationFrame(frame);
+  }, [load]);
   const visible = useMemo(() => ipos.filter((it) => !search || `${it.symbol || ""} ${it.name}`.toUpperCase().includes(search.toUpperCase())), [ipos, search]);
   return (
     <div className="flex flex-col min-h-full">
@@ -36,10 +40,18 @@ export default function IpoPage() {
         <div className="flex items-center px-4 h-14 max-w-lg mx-auto"><h1 className="text-lg font-bold">IPOs</h1></div>
       </header>
       <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3">
-        <input className="ui-input" placeholder="Buscar" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <div className="flex flex-wrap gap-1">{(["all", "expected", "filed", "priced"] as const).map((s) => <button key={s} type="button" className={status === s ? "ui-chip ui-chip-active" : "ui-chip"} onClick={() => setStatus(s)}>{s === "all" ? "Todos" : STATUS_LABEL[s]}</button>)}</div>
-        <button type="button" className="ui-btn ui-btn-primary w-full" onClick={() => void load()}>{loading ? "Cargando…" : "Actualizar"}</button>
-        {error ? <p className="text-danger text-sm">{error}</p> : null}
+        <label className="sr-only" htmlFor="ipo-search">Buscar IPO por ticker o nombre</label>
+        <input id="ipo-search" className="ui-input" placeholder="Buscar" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <ScrollableChips
+          label="Filtrar ofertas por estado"
+          options={(["all", "expected", "filed", "priced"] as const).map((item) => ({ value: item, label: item === "all" ? "Todos" : STATUS_LABEL[item] }))}
+          value={status}
+          onChange={setStatus}
+        />
+        <button type="button" className="ui-btn ui-btn-primary w-full" disabled={loading} aria-busy={loading} onClick={() => void load()}>
+          {loading ? "Cargando…" : "Actualizar"}
+        </button>
+        {error ? <p className="text-danger text-sm" role="alert">{error}</p> : null}
         {visible.map((it, i) => (
           <div key={`${it.symbol || it.name}-${i}`} className="bg-card border border-border rounded-xl p-3">
             <p className="text-xs text-muted">{formatDay(it.date)} {it.exchange ? `· ${it.exchange}` : ""} {it.status ? `· ${STATUS_LABEL[it.status] || it.status}` : ""}</p>

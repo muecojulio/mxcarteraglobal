@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { usePageVisible, isPageVisibleNow } from "@/lib/use-page-visible";
 import type { Quote, SearchResult, IndexQuote } from "./types";
 import { useRealtimeTicks, mergeQuotesWithTicks } from "./realtime";
@@ -37,13 +37,18 @@ export function useQuotes(symbols: string[], refreshMs = 60_000, opts?: { realti
   }, [key, symbols.length, cacheKey, refreshMs]);
   useEffect(() => {
     if (!pageVisible) return;
-    const hit = cacheGet<QuotesResponse>(cacheKey);
-    if (hit) { setData(hit); setLoading(false); } else setLoading(true);
-    fetchQuotes();
-    if (refreshMs > 0) {
-      const id = setInterval(() => { if (isPageVisibleNow()) fetchQuotes({ force: true }); }, refreshMs);
-      return () => clearInterval(id);
-    }
+    let intervalId: number | null = null;
+    const frame = window.requestAnimationFrame(() => {
+      setLoading(true);
+      void fetchQuotes();
+      if (refreshMs > 0) {
+        intervalId = window.setInterval(() => { if (isPageVisibleNow()) void fetchQuotes({ force: true }); }, refreshMs);
+      }
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (intervalId !== null) window.clearInterval(intervalId);
+    };
   }, [fetchQuotes, refreshMs, pageVisible, cacheKey]);
   const { ticks, status: wsStatus } = useRealtimeTicks(realtime && pageVisible ? symbols : []);
   const merged = useMemo(() => {
@@ -58,22 +63,38 @@ export function useSymbolSearch() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
   const search = useCallback(async (query: string) => {
-    if (!query.trim()) { setResults([]); return; }
-    setLoading(true); setError(null);
-    const qKey = `search:${query.trim().toLowerCase()}`;
+    const id = ++requestId.current;
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery) {
+      setResults([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    const qKey = `search:${normalizedQuery.toLowerCase()}`;
     const hit = cacheGet<SearchResult[]>(qKey);
-    if (hit) { setResults(hit); setLoading(false); return; }
+    if (hit) {
+      if (id === requestId.current) { setResults(hit); setLoading(false); }
+      return;
+    }
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}`);
+      const res = await fetch(`/api/search?q=${encodeURIComponent(normalizedQuery)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = (await res.json()) as SearchResponse;
-      setResults(json.results);
       cacheSet(qKey, json.results, CACHE_TTL.search);
+      if (id === requestId.current) setResults(json.results);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error de búsqueda");
-      setResults([]);
-    } finally { setLoading(false); }
+      if (id === requestId.current) {
+        setError(err instanceof Error ? err.message : "Error de búsqueda");
+        setResults([]);
+      }
+    } finally {
+      if (id === requestId.current) setLoading(false);
+    }
   }, []);
   return { results, loading, error, search };
 }
@@ -100,33 +121,52 @@ export function useIndices(refreshMs = 60_000) {
   const pageVisible = usePageVisible();
   useEffect(() => {
     if (!pageVisible) return;
-    setLoading(true);
-    fetchIndices();
-    if (refreshMs > 0) {
-      const id = setInterval(() => { if (isPageVisibleNow()) fetchIndices(); }, refreshMs);
-      return () => clearInterval(id);
-    }
+    let intervalId: number | null = null;
+    const frame = window.requestAnimationFrame(() => {
+      setLoading(true);
+      void fetchIndices();
+      if (refreshMs > 0) {
+        intervalId = window.setInterval(() => { if (isPageVisibleNow()) void fetchIndices(); }, refreshMs);
+      }
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (intervalId !== null) window.clearInterval(intervalId);
+    };
   }, [fetchIndices, refreshMs, pageVisible]);
   return { data, loading, error, refresh: () => fetchIndices({ force: true }) };
 }
 
 export function useDividends(symbol: string | null) {
-  const [data, setData] = useState<DividendsResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ symbol: string; data: DividendsResponse | null; error: string | null } | null>(null);
   useEffect(() => {
-    if (!symbol) { setData(null); return; }
+    if (!symbol) return;
     let cancelled = false;
-    setLoading(true); setError(null);
     const dKey = `div:${symbol}`;
     const hit = cacheGet<DividendsResponse>(dKey);
-    if (hit) { setData(hit); setLoading(false); return; }
+    if (hit) {
+      queueMicrotask(() => {
+        if (!cancelled) setResult({ symbol, data: hit, error: null });
+      });
+      return () => { cancelled = true; };
+    }
     fetch(`/api/dividends?symbol=${encodeURIComponent(symbol)}`)
       .then(async (res) => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json() as Promise<DividendsResponse>; })
-      .then((json) => { if (!cancelled) { setData(json); cacheSet(dKey, json, CACHE_TTL.dividends); } })
-      .catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : "Error"); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .then((json) => {
+        if (!cancelled) {
+          cacheSet(dKey, json, CACHE_TTL.dividends);
+          setResult({ symbol, data: json, error: null });
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setResult({ symbol, data: null, error: err instanceof Error ? err.message : "Error" });
+      });
     return () => { cancelled = true; };
   }, [symbol]);
-  return { data, loading, error };
+  const current = symbol && result?.symbol === symbol ? result : null;
+  return {
+    data: current?.data ?? null,
+    loading: !!symbol && !current,
+    error: current?.error ?? null,
+  };
 }

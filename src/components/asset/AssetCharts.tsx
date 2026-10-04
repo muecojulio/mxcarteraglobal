@@ -10,7 +10,7 @@ export function fmtMoney(n: number) {
   if (Math.abs(n) >= 1e6) return `${(n / 1e6).toFixed(0)} M`;
   return fmt(n, 0);
 }
-export function Sparkline({ data, times, positive, formatValue }: { data: number[]; times?: number[]; positive: boolean; formatValue?: (n: number) => string }) {
+export function Sparkline({ data, positive, formatValue }: { data: number[]; positive: boolean; formatValue?: (n: number) => string }) {
   const [active, setActive] = useState<number | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   if (!data.length) return <div className="h-44 flex items-center justify-center text-muted text-sm">Sin datos del periodo</div>;

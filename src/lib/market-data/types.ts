@@ -6,12 +6,24 @@ export interface Quote {
 }
 export interface SearchResult { symbol: string; name: string; exchange?: string; type?: string; region?: Region; currency?: string; }
 export interface IndexQuote { symbol: string; name: string; price: number; changePercent: number; region: Region; updatedAt: string; source: string; }
+export interface DividendRecord {
+  date: string;
+  amount: number;
+  currency?: string;
+  exDate?: string;
+  paymentDate?: string;
+  recordDate?: string;
+  declarationDate?: string;
+  frequency?: string;
+  type?: string;
+}
 export interface MarketDataProvider {
   name: string;
   getQuote(symbol: string): Promise<Quote | null>;
   getQuotes(symbols: string[]): Promise<Quote[]>;
   search(query: string): Promise<SearchResult[]>;
   getIndices?(): Promise<IndexQuote[]>;
+  getDividends?(symbol: string): Promise<DividendRecord[]>;
 }
 export function detectRegion(symbol: string): Region {
   const s = symbol.toUpperCase();

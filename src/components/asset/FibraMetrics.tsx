@@ -13,9 +13,9 @@ export function FibraMetrics({
   riskFreeMx?: number | null;
 }) {
   const meta = getFibraMeta(symbol);
-  const [rfFetched, setRfFetched] = useState<number | null>(riskFreeMx ?? null);
+  const [rfFetched, setRfFetched] = useState<number | null>(null);
   useEffect(() => {
-    if (riskFreeMx != null) { setRfFetched(riskFreeMx); return; }
+    if (riskFreeMx != null) return;
     let cancelled = false;
     fetch("/api/risk-free")
       .then((r) => r.json())
@@ -30,7 +30,7 @@ export function FibraMetrics({
     const annual = divs.length >= 4 ? divs.slice(0, 4).reduce((s, d) => s + d.amount, 0) : divs[0].amount * 4;
     yieldPct = (annual / price) * 100;
   }
-  const rf = rfFetched;
+  const rf = riskFreeMx ?? rfFetched;
   const spread = yieldPct != null && rf != null ? yieldPct - rf : null;
   return (
     <section className="bg-card rounded-xl border border-border p-4 mb-4">

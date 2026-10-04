@@ -43,9 +43,16 @@ async function fetchFinnhubDividends(symbol: string, token: string) {
     const from = new Date(Date.now() - 10 * 365 * 86400000).toISOString().slice(0, 10);
     const res = await fetch(`https://finnhub.io/api/v1/stock/dividend?symbol=${encodeURIComponent(symbol)}&from=${from}&to=${to}&token=${encodeURIComponent(token)}`, { next: { revalidate: 3600 } });
     if (!res.ok) return [];
-    const data = await res.json();
+    const data: unknown = await res.json();
     if (!Array.isArray(data)) return [];
-    return data.filter((d: any) => d?.amount != null && d?.date).map((d: any) => ({ date: String(d.date).slice(0, 10), amount: Number(d.amount), currency: "USD" }));
+    return data.flatMap((value: unknown) => {
+      if (typeof value !== "object" || value === null) return [];
+      const dividend = value as Record<string, unknown>;
+      if (dividend.amount == null || !dividend.date) return [];
+      const amount = Number(dividend.amount);
+      if (!Number.isFinite(amount)) return [];
+      return [{ date: String(dividend.date).slice(0, 10), amount, currency: "USD" }];
+    });
   } catch { return []; }
 }
 
@@ -96,7 +103,7 @@ class CompositeProvider implements MarketDataProvider {
   }
   async getDividends(symbol: string) {
     const sym = symbol.trim().toUpperCase();
-    if (detectRegion(sym) === "MX" && this.mx) { try { const divs = await this.mx.getDividends(sym); if (divs.length) return divs.map((d) => ({ date: d.date, amount: d.amount, currency: d.currency || "MXN", exDate: d.exDate, type: d.type })); } catch { /* next */ } }
+    if (detectRegion(sym) === "MX" && this.mx) { try { const divs = await this.mx.getDividends(sym); if (divs.length) return divs.map((d) => ({ date: d.date, amount: d.amount, currency: d.currency || "MXN", exDate: d.exDate })); } catch { /* next */ } }
     if (this.fmp) { try { const fmpDivs = await this.fmp.getDividends(sym); if (fmpDivs.length) return fmpDivs; } catch { /* next */ } }
     const fh = process.env.FINNHUB_API_KEY?.trim(); if (fh) { const fhDivs = await fetchFinnhubDividends(sym, fh); if (fhDivs.length) return fhDivs; }
     return fetchYahooDividends(sym);

@@ -10,7 +10,7 @@ export function useRealtimeTicks(symbols: string[]) {
   const key = symbols.map((s) => s.toUpperCase()).filter((s) => s && !s.includes(".") && !s.endsWith(".MX")).filter((s, i, a) => a.indexOf(s) === i).slice(0, 25).join(",");
   const disconnect = useCallback(() => { if (wsRef.current) { try { wsRef.current.close(); } catch { /* */ } wsRef.current = null; } }, []);
   useEffect(() => {
-    if (!key) { disconnect(); setStatus("off"); return; }
+    if (!key) { disconnect(); return; }
     let cancelled = false;
     const connect = async () => {
       setStatus("connecting"); setError(null);
