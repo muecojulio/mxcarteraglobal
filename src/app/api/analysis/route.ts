@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { sanitizeSymbol } from "@/lib/sanitize";
+
 export async function GET(req: NextRequest) {
-  const symbol = (req.nextUrl.searchParams.get("symbol") || "AAPL").toUpperCase();
+  const symbol = sanitizeSymbol(req.nextUrl.searchParams.get("symbol")) || "AAPL";
   return NextResponse.json({
     symbol, name: symbol, region: symbol.endsWith(".MX") ? "MX" : "US",
     analysis: {

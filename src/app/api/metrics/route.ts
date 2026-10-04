@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { freeYahooSummary } from "@/lib/free-finance";
 import { detectRegion } from "@/lib/market-data/types";
+import { sanitizeSymbolList } from "@/lib/sanitize";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const raw = req.nextUrl.searchParams.get("symbols") || "AAPL,MSFT,AMXL.MX";
-  const symbols = raw.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean).slice(0, 12);
+  const symbols = sanitizeSymbolList(raw, 12);
   const rows = [];
   for (const symbol of symbols) {
     const s = await freeYahooSummary(symbol);

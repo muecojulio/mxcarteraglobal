@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { freeYahooHistory } from "@/lib/yahoo-history";
+import { sanitizeRange, sanitizeSymbol } from "@/lib/sanitize";
 
 export const dynamic = "force-dynamic";
 
@@ -10,15 +11,18 @@ const RANGE: Record<string, string> = {
   "1a": "1y",
   "5a": "5y",
 };
+const RANGE_KEYS = Object.keys(RANGE);
 
 export async function GET(req: NextRequest) {
   const holdingsRaw = req.nextUrl.searchParams.get("holdings") || "";
-  const rangeKey = req.nextUrl.searchParams.get("range") || "1s";
+  const rangeKey = sanitizeRange(req.nextUrl.searchParams.get("range"), RANGE_KEYS, "1s");
   const yahooRange = RANGE[rangeKey] || "1y";
   const parts = holdingsRaw.split(",").map((p) => p.trim()).filter(Boolean).slice(0, 20);
   const holdings = parts.map((p) => {
-    const [symbol, qty] = p.split(":");
-    return { symbol: (symbol || "").toUpperCase(), qty: Number(qty) || 0 };
+    const [symbolRaw, qtyRaw] = p.split(":");
+    const symbol = sanitizeSymbol(symbolRaw);
+    const qty = Math.min(Math.max(Number(qtyRaw) || 0, 0), 1_000_000_000);
+    return { symbol: symbol || "", qty };
   }).filter((h) => h.symbol && h.qty > 0);
   if (!holdings.length) return NextResponse.json({ points: [], periodChange: null, periodChangePercent: null });
   try {
