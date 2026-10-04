@@ -4,12 +4,15 @@ import { freeYahooSummary, freeYahooDividends } from "@/lib/free-finance";
 import { freeYahooHistory } from "@/lib/yahoo-history";
 import { getFibraMeta } from "@/lib/fibra-meta";
 import { isSicSymbol } from "@/lib/sic-catalog";
+import { sanitizeRange, sanitizeSymbol } from "@/lib/sanitize";
 
 export const dynamic = "force-dynamic";
 
+const HISTORY_RANGES = ["5d", "1mo", "6mo", "1y", "5y"] as const;
+
 export async function GET(req: NextRequest) {
-  const symbol = (req.nextUrl.searchParams.get("symbol") || "").trim().toUpperCase();
-  const range = req.nextUrl.searchParams.get("range") || "1y";
+  const symbol = sanitizeSymbol(req.nextUrl.searchParams.get("symbol")) || "";
+  const range = sanitizeRange(req.nextUrl.searchParams.get("range"), HISTORY_RANGES, "1y");
   if (!symbol) return NextResponse.json({ error: "symbol requerido" }, { status: 400 });
   try {
     const p = getMarketDataProvider();

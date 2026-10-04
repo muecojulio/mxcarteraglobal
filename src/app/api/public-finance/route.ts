@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { publicFredCsv, publicTreasuryDebt, publicTradingViewScan } from "@/lib/free-finance";
+import { sanitizeSymbol, sanitizeSymbolList } from "@/lib/sanitize";
 export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
-  const series = (req.nextUrl.searchParams.get("series") || "DGS10").toUpperCase();
-  const symbols = (req.nextUrl.searchParams.get("symbols") || "")
-    .split(",")
-    .map((s: string) => s.trim())
-    .filter(Boolean)
-    .slice(0, 50);
+  const series = sanitizeSymbol(req.nextUrl.searchParams.get("series")) || "DGS10";
+  const symbols = sanitizeSymbolList(req.nextUrl.searchParams.get("symbols"), 50);
   const [fred, treasury, tradingview] = await Promise.all([
     publicFredCsv(series),
     publicTreasuryDebt(),

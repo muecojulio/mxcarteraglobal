@@ -30,7 +30,8 @@ En Vercel → Project → **Settings → Environment Variables**, puedes añadir
 
 | Nombre | Valor |
 |--------|--------|
-| `FINNHUB_API_KEY` | tu clave Finnhub |
+| `FINNHUB_API_KEY` | tu clave Finnhub para consultas servidor-servidor |
+| `FINNHUB_REALTIME_PUBLIC_TOKEN` | token Finnhub separado para WebSocket en navegador; no uses aquí una clave privada |
 | `DATABURSATIL_TOKEN` | tu token DataBursatil |
 | `FMP_API_KEY` | tu clave FMP |
 | `POLYGON_API_KEY` | tu clave Polygon |
