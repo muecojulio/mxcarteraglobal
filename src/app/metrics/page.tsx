@@ -67,8 +67,6 @@ export default function MetricsPage() {
   const [filters, setFilters] = useState<Filters>(DEFAULT);
   const [results, setResults] = useState<Row[]>([]);
   const [usdMxn, setUsdMxn] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [showFilters, setShowFilters] = useState(true);
 
@@ -89,10 +87,31 @@ export default function MetricsPage() {
     return p.toString();
   }, []);
 
-  const run = useCallback(
-    async (preset?: string, f = filters) => {
-      setLoading(true);
-      setError(null);
+  // Cada corrida se describe como un objeto; `loading`/`error` se derivan de si
+  // esa corrida ya terminó, en vez de setearse en síncrono dentro del effect.
+  const [request, setRequest] = useState<{
+    preset: string | undefined;
+    f: Filters;
+    nonce: number;
+  }>(() => ({ preset: "all", f: DEFAULT, nonce: 0 }));
+  const [settled, setSettled] = useState<{ nonce: number; error: string | null } | null>(
+    null
+  );
+  const isCurrent = settled?.nonce === request.nonce;
+  const loading = !isCurrent;
+  const error = isCurrent ? settled?.error ?? null : null;
+
+  const run = useCallback((preset?: string) => {
+    setFilters((f) => {
+      setRequest((r) => ({ preset, f, nonce: r.nonce + 1 }));
+      return f;
+    });
+  }, []);
+
+  useEffect(() => {
+    const { preset, f, nonce } = request;
+    let cancelled = false;
+    void (async () => {
       try {
         // Sin filtros estrictos al inicio: pedir type only o preset
         let qs = "";
@@ -106,24 +125,24 @@ export default function MetricsPage() {
         const res = await fetch(`/api/metrics?${qs}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
+        if (cancelled) return;
         setResults(data.results || []);
         setUsdMxn(data.usdMxn ?? null);
         setNote(data.note || "");
+        setSettled({ nonce, error: null });
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Error");
+        if (cancelled) return;
         setResults([]);
-      } finally {
-        setLoading(false);
+        setSettled({
+          nonce,
+          error: e instanceof Error ? e.message : "Error",
+        });
       }
-    },
-    [filters, buildQuery]
-  );
-
-  useEffect(() => {
-    // Carga inicial sin filtros agresivos (todos del universo)
-    run("all");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [request, buildQuery]);
 
   const set = (key: keyof Filters, value: string | boolean) => {
     setFilters((prev) => ({ ...prev, [key]: value }));

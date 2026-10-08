@@ -419,14 +419,16 @@ export default function AssetPage() {
     dataSources?: Record<string, string | null>;
     assetType?: string;
   } | null>(null);
-  const [loading, setLoading] = useState(true);
+  // `loading` se deriva de para qué petición terminó la carga, en vez de
+  // setearse en síncrono dentro del effect.
+  const requestKey = raw ? `${raw}|${range}` : "";
+  const [settledFor, setSettledFor] = useState<string | null>(null);
+  const loading = requestKey !== "" && settledFor !== requestKey;
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!raw) return;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
     fetch(`/api/asset?symbol=${encodeURIComponent(raw)}&range=${range}`)
       .then(async (res) => {
         if (!res.ok) {
@@ -442,12 +444,12 @@ export default function AssetPage() {
         if (!cancelled) setError(err instanceof Error ? err.message : "Error");
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setSettledFor(requestKey);
       });
     return () => {
       cancelled = true;
     };
-  }, [raw, range]);
+  }, [raw, range, requestKey]);
 
   const quote = data?.quote ?? null;
   const closes = useMemo(

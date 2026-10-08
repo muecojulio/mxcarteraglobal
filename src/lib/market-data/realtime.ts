@@ -19,7 +19,7 @@ type Tick = {
  */
 export function useRealtimeTicks(symbols: string[]) {
   const [ticks, setTicks] = useState<Record<string, Tick>>({});
-  const [status, setStatus] = useState<
+  const [statusRaw, setStatus] = useState<
     "idle" | "connecting" | "live" | "error" | "off"
   >("idle");
   const [error, setError] = useState<string | null>(null);
@@ -42,10 +42,13 @@ export function useRealtimeTicks(symbols: string[]) {
     }
   }, []);
 
+  // Sin símbolos elegibles el socket está apagado; se deriva en vez de
+  // setearse en síncrono dentro del effect.
+  const status = key === "" ? "off" : statusRaw;
+
   useEffect(() => {
     if (!key) {
       disconnect();
-      setStatus("off");
       return;
     }
 

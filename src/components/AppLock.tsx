@@ -2,6 +2,11 @@
 
 import { useEffect, useState, useCallback } from "react";
 import {
+  useHydratedState,
+  useMounted,
+  localStorageIdentity,
+} from "@/lib/use-hydrated-value";
+import {
   isLockEnabled,
   isUnlockedThisSession,
   markUnlocked,
@@ -15,30 +20,41 @@ import {
   getRecoveryContacts,
 } from "@/lib/app-lock";
 
+/** Constante de módulo: useSyncExternalStore exige un snapshot estable. */
+const EMPTY_CONTACTS = { email: "", phone: "" };
+
 export default function AppLock({ children }: { children: React.ReactNode }) {
-  const [ready, setReady] = useState(false);
-  const [needsLock, setNeedsLock] = useState(false);
+  // `ready` evita el parpadeo de la pantalla de bloqueo durante la hidratación;
+  // `needsLock` y `contacts` salen del almacenamiento local durante el render.
+  const ready = useMounted();
+  const [needsLock, setNeedsLock] = useHydratedState(
+    () => `${localStorage.getItem("mxcg_lock_enabled") ?? ""}|${
+      localStorage.getItem("mxcg_lock_unlocked") ?? ""
+    }`,
+    () => isLockEnabled() && !isUnlockedThisSession(),
+    false
+  );
   const [mode, setMode] = useState<"pin" | "recover">("pin");
   const [pin, setPin] = useState("");
   const [recoveryCode, setRecoveryCode] = useState("");
   const [newPin, setNewPin] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [contacts, setContacts] = useState({ email: "", phone: "" });
+  const [contacts] = useHydratedState(
+    localStorageIdentity("mxcg_lock_email"),
+    getRecoveryContacts,
+    EMPTY_CONTACTS
+  );
 
+  // El intento biométrico es el único trabajo del effect; el resto se hidrata
+  // durante el render.
   useEffect(() => {
-    const enabled = isLockEnabled();
-    const unlocked = isUnlockedThisSession();
-    setNeedsLock(enabled && !unlocked);
-    setContacts(getRecoveryContacts());
-    setReady(true);
-
-    if (enabled && !unlocked && isBioPreferred() && canUseWebAuthn()) {
+    if (needsLock && isBioPreferred() && canUseWebAuthn()) {
       tryBiometricUnlock().then((ok) => {
         if (ok) setNeedsLock(false);
       });
     }
-  }, []);
+  }, [needsLock, setNeedsLock]);
 
   const onSubmit = useCallback(
     async (e?: React.FormEvent) => {
@@ -70,7 +86,7 @@ export default function AppLock({ children }: { children: React.ReactNode }) {
         setBusy(false);
       }
     },
-    [pin]
+    [pin, setNeedsLock]
   );
 
   const onRecover = async (e?: React.FormEvent) => {
