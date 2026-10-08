@@ -4,7 +4,12 @@ import { PortfolioBackup } from "@/components/PortfolioBackup";
 import { CloudVaultPanel } from "@/components/CloudVaultPanel";
 import { TaxEstimator } from "@/components/TaxEstimator";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import {
+  useHydratedState,
+  useMounted,
+  localStorageIdentity,
+} from "@/lib/use-hydrated-value";
 import {
   isLockEnabled,
   setPin,
@@ -30,26 +35,38 @@ const THEME_OPTIONS: { key: ThemeMode; label: string; desc: string }[] = [
 ];
 
 export default function SettingsPage() {
-  const [theme, setTheme] = useState<ThemeMode>("system");
-  const [mounted, setMounted] = useState(false);
-  const [lockOn, setLockOn] = useState(false);
-  const [bioOn, setBioOn] = useState(false);
+  // Todo lo que viene del dispositivo se hidrata durante el render y sigue
+  // siendo editable. Antes era un effect con seis setState síncronos.
+  const [theme, setTheme] = useHydratedState<ThemeMode>(
+    localStorageIdentity("marketpulse_theme"),
+    getStoredTheme,
+    "system"
+  );
+  const mounted = useMounted();
+  const [lockOn, setLockOn] = useHydratedState(
+    localStorageIdentity("mxcg_lock_enabled"),
+    isLockEnabled,
+    false
+  );
+  const [bioOn, setBioOn] = useHydratedState(
+    localStorageIdentity("mxcg_lock_bio"),
+    isBioPreferred,
+    false
+  );
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [lockMsg, setLockMsg] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useHydratedState(
+    localStorageIdentity("mxcg_lock_email"),
+    () => getRecoveryContacts().email,
+    ""
+  );
+  const [phone, setPhone] = useHydratedState(
+    localStorageIdentity("mxcg_lock_phone"),
+    () => getRecoveryContacts().phone,
+    ""
+  );
   const [recoveryShown, setRecoveryShown] = useState("");
-
-  useEffect(() => {
-    setTheme(getStoredTheme());
-    setLockOn(isLockEnabled());
-    setBioOn(isBioPreferred());
-    const c = getRecoveryContacts();
-    setEmail(c.email);
-    setPhone(c.phone);
-    setMounted(true);
-  }, []);
 
   const onTheme = (mode: ThemeMode) => {
     setTheme(mode);

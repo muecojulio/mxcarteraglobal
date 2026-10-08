@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sanitizeSymbol } from "@/lib/sanitize";
 import { getMarketDataProvider, detectRegion, isExcludedInstrument, normalizeYahooSymbol } from "@/lib/market-data";
 import { freeYahooSummary, publicSecCompanyFacts } from "@/lib/free-finance";
+import { withCachePolicy } from "@/lib/http-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -243,7 +244,7 @@ function buildAnalysis(input: {
   };
 }
 
-export async function GET(req: NextRequest) {
+async function get(req: NextRequest) {
   const symbol = sanitizeSymbol(req.nextUrl.searchParams.get("symbol"));
   if (!symbol) {
     return NextResponse.json({ error: "symbol requerido" }, { status: 400 });
@@ -398,3 +399,5 @@ export async function GET(req: NextRequest) {
     );
   }
 }
+
+export const GET = withCachePolicy("/api/analysis", get);

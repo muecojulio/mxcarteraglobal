@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withCachePolicy } from "@/lib/http-cache";
 
 /**
  * Proxy de blob cifrado. El servidor NO tiene la llave;
@@ -9,7 +10,7 @@ const BASE = "https://jsonblob.com/api/jsonBlob";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest) {
+async function get(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id")?.trim();
   if (!id || !/^[A-Za-z0-9-]+$/.test(id)) {
     return NextResponse.json({ error: "ID inválido" }, { status: 400 });
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+async function post(req: NextRequest) {
   try {
     const body = await req.json();
     const envelope = body?.envelope;
@@ -73,3 +74,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Error al subir" }, { status: 500 });
   }
 }
+
+export const GET = withCachePolicy("/api/sync", get);
+export const POST = withCachePolicy("/api/sync", post);

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { publicFredCsv } from "@/lib/free-finance";
+import { withCachePolicy } from "@/lib/http-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -7,7 +8,7 @@ export const dynamic = "force-dynamic";
  * Tasa libre de riesgo aproximada: Treasury/FRED (pública, sin key) primero;
  * Yahoo ^IRX queda como respaldo. La tasa MX es un proxy educativo.
  */
-export async function GET() {
+async function get() {
   let us: number | null = null;
   let mx: number | null = null;
   let sourceUs = "";
@@ -58,7 +59,8 @@ export async function GET() {
       sourceMx,
       source: fred?.latest?.value != null ? "fred-treasury" : sourceUs,
       note: "FRED publica el Treasury a 3 meses. La referencia mexicana es un diferencial estimado, no una tasa CETES oficial.",
-    },
-    { headers: { "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=7200" } }
+    }
   );
 }
+
+export const GET = withCachePolicy("/api/risk-free", get);

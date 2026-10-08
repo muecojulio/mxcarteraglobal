@@ -13,6 +13,9 @@ type Ev = {
   amount?: number | null;
 };
 
+/** Constante de módulo para no recrear el array en cada render. */
+const EMPTY_EVENTS: Ev[] = [];
+
 const TYPE_LABEL: Record<string, string> = {
   dividend: "Dividendo",
   earnings: "Resultados",
@@ -40,21 +43,23 @@ export function PortfolioEvents({
   title?: string;
   defaultFilter?: "all" | "dividend" | "earnings" | "split";
 }) {
-  const [events, setEvents] = useState<Ev[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [eventsRaw, setEvents] = useState<Ev[]>([]);
   const [filter, setFilter] = useState<"all" | "dividend" | "earnings" | "split">(
     defaultFilter
   );
   const [onlyThisMonth, setOnlyThisMonth] = useState(true);
 
+  // `loading` y `events` se derivan de para qué lista de símbolos terminó la
+  // carga, en vez de setearse en síncrono dentro del effect.
+  const symbolsKey = symbols.join(",");
+  const [settledFor, setSettledFor] = useState<string | null>(null);
+  const loading = symbolsKey !== "" && settledFor !== symbolsKey;
+  const events = symbolsKey === "" ? EMPTY_EVENTS : eventsRaw;
+
   useEffect(() => {
-    if (!symbols.length) {
-      setEvents([]);
-      return;
-    }
+    if (!symbols.length) return;
     let cancelled = false;
-    (async () => {
-      setLoading(true);
+    void (async () => {
       try {
         const res = await fetch(
           `/api/portfolio-events?symbols=${encodeURIComponent(
@@ -67,13 +72,14 @@ export function PortfolioEvents({
       } catch {
         /* */
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setSettledFor(symbolsKey);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [symbols.join(",")]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbolsKey]);
 
   const thisMonth = monthKey(new Date());
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { searchMxUniverse } from "@/lib/mx-universe";
 import { freeYahooSearch } from "@/lib/free-finance";
 import { isExcludedInstrument, normalizeYahooSymbol } from "@/lib/market-data/types";
+import { withCachePolicy } from "@/lib/http-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
  * Primero busca en BMV/BIVA/SIC; Yahoo amplía la búsqueda si el catálogo local
  * no devuelve coincidencias. Forex y cripto no se incluyen.
  */
-export async function GET(req: NextRequest) {
+async function get(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q")?.trim().slice(0, 40);
   if (!q) {
     return NextResponse.json(
@@ -45,8 +46,7 @@ export async function GET(req: NextRequest) {
           results.length === 0
             ? "No se encontró el símbolo en el catálogo ni en Yahoo Finance."
             : undefined,
-      },
-      { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=900" } }
+      }
     );
   } catch (err) {
     console.error("API /search error:", err);
@@ -56,3 +56,5 @@ export async function GET(req: NextRequest) {
     );
   }
 }
+
+export const GET = withCachePolicy("/api/search", get);

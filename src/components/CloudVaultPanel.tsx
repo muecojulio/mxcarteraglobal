@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import {
+  useHydratedState,
+  localStorageIdentity,
+} from "@/lib/use-hydrated-value";
 import { ActionButton } from "@/components/ui/ActionButton";
 import { vaultStatus } from "@/lib/crypto-vault";
 import { hydrateVaultPersist } from "@/lib/persist";
@@ -14,9 +18,28 @@ import {
 import { isLockEnabled } from "@/lib/app-lock";
 
 export function CloudVaultPanel() {
-  const [status, setStatus] = useState(vaultStatus());
-  const [syncId, setSyncId] = useState("");
-  const [last, setLast] = useState<string | null>(null);
+  // Estado, id y última sincronización salen del almacenamiento durante el
+  // render; el effect solo se ocupa de asegurar la bóveda del dispositivo.
+  const [status, setStatus] = useHydratedState(
+    () =>
+      [
+        sessionStorage.getItem("mxcg_vault_mk") ?? "",
+        localStorage.getItem("mxcg_vault_wrap") ?? "",
+        localStorage.getItem("mxcg_vault_device") ?? "",
+      ].join("|"),
+    vaultStatus,
+    "none" as const
+  );
+  const [syncId, setSyncId] = useHydratedState(
+    localStorageIdentity("mxcg_sync_id"),
+    () => getSyncId() || "",
+    ""
+  );
+  const [last, setLast] = useHydratedState(
+    localStorageIdentity("mxcg_sync_at"),
+    getLastSyncAt,
+    null
+  );
   const [msg, setMsg] = useState("");
   const inFlight = useRef(false);
   const [outcome, setOutcome] = useState<"success" | "error" | null>(null);
@@ -26,19 +49,20 @@ export function CloudVaultPanel() {
   const [cloudPass, setCloudPass] = useState("");
 
   useEffect(() => {
-    setStatus(vaultStatus());
-    setSyncId(getSyncId() || "");
-    setLast(getLastSyncAt());
+    let cancelled = false;
     void (async () => {
       try {
         await ensureDeviceVault();
         await hydrateVaultPersist();
-        setStatus(vaultStatus());
+        if (!cancelled) setStatus(vaultStatus());
       } catch {
         /* */
       }
     })();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [setStatus]);
 
   const onPush = async () => {
     if (inFlight.current) return;

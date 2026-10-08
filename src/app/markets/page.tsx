@@ -56,8 +56,9 @@ function MarketsInner() {
     gainers: Mover[];
     losers: Mover[];
   } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // `loading`/`error` derivados de qué petición terminó (ver calendar).
+  const [settled, setSettled] = useState<{ key: string; error: string | null } | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const { fx } = useUsdMxn(120_000);
   const usdMxn = fx?.usdMxn ?? null;
 
@@ -73,27 +74,41 @@ function MarketsInner() {
     60_000
   );
 
-  const load = useCallback(async () => {
-    if (tab === "bonds" || tab === "commodities") return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/markets?region=${region}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setIndices(data.indices || []);
-      setQuotes(data.quotes || []);
-      setMovers(data.movers || null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error");
-    } finally {
-      setLoading(false);
-    }
-  }, [region, tab]);
+  const skipFetch = tab === "bonds" || tab === "commodities";
+  const requestKey = `${region}|${tab}|${reloadNonce}`;
+  const isCurrent = settled?.key === requestKey;
+  // En las pestañas de bonos/commodities los datos vienen de useQuotes, no de
+  // /api/markets, así que ahí no hay carga propia.
+  const loading = !skipFetch && !isCurrent;
+  const error = isCurrent ? settled?.error ?? null : null;
+
+  const load = useCallback(() => setReloadNonce((n) => n + 1), []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (skipFetch) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/markets?region=${region}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+        setIndices(data.indices || []);
+        setQuotes(data.quotes || []);
+        setMovers(data.movers || null);
+        setSettled({ key: requestKey, error: null });
+      } catch (err) {
+        if (cancelled) return;
+        setSettled({
+          key: requestKey,
+          error: err instanceof Error ? err.message : "Error",
+        });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [region, skipFetch, requestKey]);
 
   const title =
     tab === "bonds"

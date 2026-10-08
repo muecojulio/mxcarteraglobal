@@ -54,7 +54,9 @@ export function useQuotes(
   opts?: { realtime?: boolean }
 ) {
   const [data, setData] = useState<QuotesResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  // `loading` se deriva de para qué clave terminó la carga, en vez de
+  // setearse en síncrono dentro del effect.
+  const [settledFor, setSettledFor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const realtime = opts?.realtime !== false; // por defecto ON
 
@@ -63,19 +65,20 @@ export function useQuotes(
   const pageVisible = usePageVisible();
 
   const cacheKey = key ? `quotes:${key}` : "quotes:empty";
+  const loading = settledFor !== cacheKey;
 
   const fetchQuotes = useCallback(async (opts?: { force?: boolean }) => {
     if (!isPageVisibleNow()) return;
     if (symbols.length === 0) {
       setData({ quotes: [], count: 0, usingRealData: false, provider: "none" });
-      setLoading(false);
+      setSettledFor(cacheKey);
       return;
     }
     if (!opts?.force) {
       const hit = cacheGet<QuotesResponse>(cacheKey);
       if (hit) {
         setData(hit);
-        setLoading(false);
+        setSettledFor(cacheKey);
         return;
       }
     }
@@ -93,20 +96,16 @@ export function useQuotes(
       if (stale) setData(stale);
       setError(err instanceof Error ? err.message : "Error de red");
     } finally {
-      setLoading(false);
+      setSettledFor(cacheKey);
     }
   }, [key, symbols.length, cacheKey, refreshMs]);
 
   useEffect(() => {
     if (!pageVisible) return;
-    const hit = cacheGet<QuotesResponse>(cacheKey);
-    if (hit) {
-      setData(hit);
-      setLoading(false);
-    } else {
-      setLoading(true);
-    }
-    fetchQuotes();
+    // Llamada inicial tras un await: nada síncrono en el cuerpo del effect.
+    void (async () => {
+      await fetchQuotes();
+    })();
     if (refreshMs > 0) {
       const id = setInterval(() => {
         if (isPageVisibleNow()) fetchQuotes({ force: true });
@@ -181,7 +180,10 @@ export function useSymbolSearch() {
 
 export function useIndices(refreshMs = 60_000) {
   const [data, setData] = useState<IndicesResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  // `loading` se deriva de si la carga ya terminó, en vez de setearse en
+  // síncrono dentro del effect.
+  const [settled, setSettled] = useState(false);
+  const loading = !settled;
   const [error, setError] = useState<string | null>(null);
 
   const fetchIndices = useCallback(async (opts?: { force?: boolean }) => {
@@ -189,7 +191,7 @@ export function useIndices(refreshMs = 60_000) {
       const hit = cacheGet<IndicesResponse>("indices:all");
       if (hit) {
         setData(hit);
-        setLoading(false);
+        setSettled(true);
         return;
       }
     }
@@ -205,7 +207,7 @@ export function useIndices(refreshMs = 60_000) {
       if (stale) setData(stale);
       setError(err instanceof Error ? err.message : "Error de red");
     } finally {
-      setLoading(false);
+      setSettled(true);
     }
   }, []);
 
@@ -213,8 +215,9 @@ export function useIndices(refreshMs = 60_000) {
 
   useEffect(() => {
     if (!pageVisible) return;
-    setLoading(true);
-    fetchIndices();
+    void (async () => {
+      await fetchIndices();
+    })();
     if (refreshMs > 0) {
       const id = setInterval(() => {
         if (isPageVisibleNow()) fetchIndices();
@@ -227,43 +230,45 @@ export function useIndices(refreshMs = 60_000) {
 }
 
 export function useDividends(symbol: string | null) {
-  const [data, setData] = useState<DividendsResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [dataRaw, setData] = useState<DividendsResponse | null>(null);
+  // `loading` y `data` se derivan de para qué símbolo terminó la carga, en vez
+  // de setearse en síncrono dentro del effect.
+  const [settledFor, setSettledFor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const dKey = symbol ? `div:${symbol}` : null;
+  const loading = dKey !== null && settledFor !== dKey;
+  const data = dKey === null ? null : dataRaw;
+
   useEffect(() => {
-    if (!symbol) {
-      setData(null);
-      return;
-    }
+    if (!symbol) return;
+    const key = `div:${symbol}`;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    const dKey = `div:${symbol}`;
-    const hit = cacheGet<DividendsResponse>(dKey);
-    if (hit) {
-      setData(hit);
-      setLoading(false);
-      return;
-    }
-    fetch(`/api/dividends?symbol=${encodeURIComponent(symbol)}`)
-      .then(async (res) => {
+    void (async () => {
+      const hit = cacheGet<DividendsResponse>(key);
+      if (hit) {
+        setData(hit);
+        setError(null);
+        setSettledFor(key);
+        return;
+      }
+      try {
+        const res = await fetch(
+          `/api/dividends?symbol=${encodeURIComponent(symbol)}`
+        );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json() as Promise<DividendsResponse>;
-      })
-      .then((json) => {
-        if (!cancelled) {
-          setData(json);
-          cacheSet(dKey, json, CACHE_TTL.dividends);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled)
-          setError(err instanceof Error ? err.message : "Error");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+        const json = (await res.json()) as DividendsResponse;
+        if (cancelled) return;
+        setData(json);
+        cacheSet(key, json, CACHE_TTL.dividends);
+        setError(null);
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Error");
+      } finally {
+        if (!cancelled) setSettledFor(key);
+      }
+    })();
     return () => {
       cancelled = true;
     };

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMarketDataProvider, getDataSources } from "@/lib/market-data";
+import { withCachePolicy } from "@/lib/http-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ const MX_LEADERS = [
 const EU_LEADERS = ["SAP.DE", "ASML.AS", "MC.PA", "OR.PA", "SIE.DE"];
 const ASIA_LEADERS = ["7203.T", "6758.T", "0700.HK", "9988.HK", "005930.KS"];
 
-export async function GET(req: NextRequest) {
+async function get(req: NextRequest) {
   const region = (req.nextUrl.searchParams.get("region") || "US").toUpperCase();
   const provider = getMarketDataProvider();
 
@@ -83,3 +84,5 @@ export async function GET(req: NextRequest) {
     );
   }
 }
+
+export const GET = withCachePolicy("/api/markets", get);

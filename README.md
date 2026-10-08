@@ -67,3 +67,22 @@ Guía: **[DEPLOY.md](./DEPLOY.md)**. En Vercel, las variables anteriores son opc
 ## Análisis y datos propios
 
 El análisis de activo usa reglas deterministas y datos públicos junto con los cálculos de cartera que permanecen en el dispositivo. No depende de una IA externa ni transmite la cartera a un proveedor de IA; no es asesoramiento de inversión. Los campos ausentes se dejan como no disponibles, no se inventan.
+
+## Legal y privacidad
+
+Tres avisos en `/legal`: [aviso de no asesoría](./src/app/legal/aviso/page.tsx), [términos de uso](./src/app/legal/terminos/page.tsx) y [aviso de privacidad](./src/app/legal/privacidad/page.tsx). El aviso de privacidad describe el tratamiento real de esta versión (alineado con la LFPDPPP): responsable, datos tratados y dónde viven, finalidades, terceros, respaldo cifrado, derechos ARCO y procedimiento. No hay cuentas de usuario, analítica ni cookies de rastreo.
+
+> Antes de publicar, sustituye `CONTACTO_ARCO` en `src/app/legal/privacidad/page.tsx` por el correo definitivo del responsable.
+
+## Datos, índices y caché
+
+No hay base de datos SQL: la app persiste en el dispositivo. El único índice del proyecto es el **índice invertido de trigramas** del catálogo en memoria (`src/lib/catalog-index.ts`), que evita re-normalizar los ~917 valores del universo en cada tecla escrita (~20x más rápido, verificado por `tests/catalog-index.test.mjs`).
+
+La caché HTTP de `/api/*` vive en una sola tabla (`src/lib/http-cache.ts`) y se aplica con `withCachePolicy()` sobre el handler completo: solo las respuestas 200 son cacheables, los errores y las rutas con datos del usuario salen como `private, no-store`. Detalles en **[docs/DATOS_E_INDICES.md](./docs/DATOS_E_INDICES.md)**.
+
+## Pruebas
+
+```bash
+npm test          # unitarios (catálogo/índice, normalización de búsqueda)
+npm run test:e2e  # requiere Playwright y la app corriendo en :3000
+```

@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { HorizontalRail } from "@/components/ui/HorizontalRail";
 import Link from "next/link";
 import { useQuotes, useIndices } from "@/lib/market-data/client";
 import { AssetSearch } from "@/components/AssetSearch";
 import { useUsdMxn, toMxn, formatMxn } from "@/lib/fx";
 import { loadWatchlist, loadRecentSymbols } from "@/lib/persist";
+import { useHydratedValue, localStorageIdentity } from "@/lib/use-hydrated-value";
+
+/** Constante de módulo: useSyncExternalStore exige un snapshot estable. */
+const EMPTY_SYMBOLS: string[] = [];
 
 function formatPrice(n: number) {
   return n.toLocaleString("es-MX", {
@@ -21,14 +24,20 @@ function formatPercent(n: number) {
 }
 
 export default function HomePage() {
-  const [watchSymbols, setWatchSymbols] = useState<string[]>([]);
-
-  useEffect(() => {
-    const wl = loadWatchlist();
-    const recent = loadRecentSymbols();
-    const merged = [...wl, ...recent.filter((s) => !wl.includes(s))];
-    setWatchSymbols(merged.slice(0, 8));
-  }, []);
+  // Watchlist + recientes, leído durante el render en vez de con setState en un
+  // effect (react-hooks/set-state-in-effect).
+  const watchSymbols = useHydratedValue<string[]>(
+    () =>
+      `${localStorageIdentity("marketpulse_watchlist")()}|${localStorageIdentity(
+        "mxcg_recent_symbols"
+      )()}`,
+    () => {
+      const wl = loadWatchlist();
+      const recent = loadRecentSymbols();
+      return [...wl, ...recent.filter((s) => !wl.includes(s))].slice(0, 8);
+    },
+    EMPTY_SYMBOLS
+  );
 
   const {
     data: indicesData,

@@ -126,7 +126,7 @@ async function unwrapKey(pack: string, wrapKey: CryptoKey): Promise<Uint8Array<A
 }
 
 function getSalt(): Uint8Array<ArrayBuffer> {
-  let s = localStorage.getItem(MK_SALT);
+  const s = localStorage.getItem(MK_SALT);
   if (!s) {
     const salt = crypto.getRandomValues(new Uint8Array(16));
     localStorage.setItem(MK_SALT, b64(salt));
@@ -163,7 +163,7 @@ export async function unlockVaultWithPin(pin: string): Promise<void> {
 export async function ensureDeviceVault(): Promise<Uint8Array<ArrayBuffer>> {
   const existing = getSessionMasterKey();
   if (existing) return existing;
-  let device = localStorage.getItem(DEVICE_WRAP);
+  const device = localStorage.getItem(DEVICE_WRAP);
   if (!device) {
     const mk = await generateMasterKeyRaw();
     localStorage.setItem(DEVICE_WRAP, b64(mk));

@@ -13,6 +13,7 @@ import {
 } from "@/lib/free-finance";
 import { detectAssetType, detectRegion, isExcludedInstrument, normalizeYahooSymbol } from "@/lib/market-data/types";
 import { sanitizeSymbol, sanitizeSymbolList } from "@/lib/sanitize";
+import { withCachePolicy } from "@/lib/http-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,7 @@ function dateOnly(value: string | null, fallback: string): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(value || "") ? value! : fallback;
 }
 
-export async function GET(req: NextRequest) {
+async function get(req: NextRequest) {
   const params = req.nextUrl.searchParams;
   const series = params.get("series")?.trim().toUpperCase() || "DGS3MO";
   const symbol = sanitizeSymbol(params.get("symbol"));
@@ -74,11 +75,8 @@ export async function GET(req: NextRequest) {
       },
       requiresApiKey: false,
       excluded: ["forex", "cryptocurrencies"],
-    },
-    {
-      headers: {
-        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=1800",
-      },
     }
   );
 }
+
+export const GET = withCachePolicy("/api/public-finance", get);

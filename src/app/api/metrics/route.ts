@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { freeYahooSummary } from "@/lib/free-finance";
 import { detectRegion, isExcludedInstrument, normalizeYahooSymbol } from "@/lib/market-data/types";
 import { getMarketDataProvider } from "@/lib/market-data";
+import { withCachePolicy } from "@/lib/http-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -357,7 +358,7 @@ async function fmpRatios(
  * &revGrowthMin=10&epsGrowthMin=10
  * &undervalued=1
  */
-export async function GET(req: NextRequest) {
+async function get(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const type = (sp.get("type") || "all") as "stock" | "etf" | "all";
   const peMax = sp.get("peMax") != null ? Number(sp.get("peMax")) : null;
@@ -614,3 +615,5 @@ export async function GET(req: NextRequest) {
     usingRealData: rows.some((row) => row.price != null || row.pe != null || row.pb != null || row.roe != null),
   });
 }
+
+export const GET = withCachePolicy("/api/metrics", get);

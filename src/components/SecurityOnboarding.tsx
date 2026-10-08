@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useHydratedValue } from "@/lib/use-hydrated-value";
 import Link from "next/link";
 import { isLockEnabled, hasRecoveryCode } from "@/lib/app-lock";
 import { loadPositions, loadWatchlist } from "@/lib/persist";
@@ -26,49 +27,59 @@ export function markBackupDone() {
   }
 }
 
+/**
+ * Decide qué paso de seguridad falta, leyendo el almacenamiento local.
+ * Se ejecuta durante el render (vía useHydratedValue) en vez de en un effect.
+ */
+function computeOnboardingStep(): "pin" | "recovery" | "backup" | null {
+  try {
+    const dismissUntil = Number(localStorage.getItem(DISMISS) || "0");
+    if (Date.now() < dismissUntil) return null;
+
+    const lock = isLockEnabled();
+    const recoveryOk =
+      localStorage.getItem(RECOVERY_SAVED) === "1" || !hasRecoveryCode();
+    const last = localStorage.getItem(LAST_BACKUP);
+    const days = last
+      ? (Date.now() - new Date(last).getTime()) / 86400000
+      : 999;
+    const hasData = loadPositions().length > 0 || loadWatchlist().length > 0;
+
+    if (!lock) return "pin";
+    if (hasRecoveryCode() && !recoveryOk) return "recovery";
+    if (hasData && days >= BACKUP_DAYS) return "backup";
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Claves que, si cambian, obligan a recalcular el paso pendiente. */
+const STEP_KEYS = [
+  DISMISS,
+  RECOVERY_SAVED,
+  LAST_BACKUP,
+  "mxcg_lock_enabled",
+  "mxcg_lock_recovery_hash",
+  "marketpulse_positions",
+  "marketpulse_watchlist",
+];
+
 export function SecurityOnboarding() {
-  const [show, setShow] = useState(false);
-  const [step, setStep] = useState<"pin" | "recovery" | "backup" | null>(null);
-
-  useEffect(() => {
-    try {
-      const dismissUntil = Number(localStorage.getItem(DISMISS) || "0");
-      if (Date.now() < dismissUntil) return;
-
-      const lock = isLockEnabled();
-      const recoveryOk =
-        localStorage.getItem(RECOVERY_SAVED) === "1" || !hasRecoveryCode();
-      const last = localStorage.getItem(LAST_BACKUP);
-      const days = last
-        ? (Date.now() - new Date(last).getTime()) / (86400000)
-        : 999;
-      const hasData =
-        loadPositions().length > 0 || loadWatchlist().length > 0;
-
-      if (!lock) {
-        setStep("pin");
-        setShow(true);
-        return;
-      }
-      if (hasRecoveryCode() && !recoveryOk) {
-        setStep("recovery");
-        setShow(true);
-        return;
-      }
-      if (hasData && days >= BACKUP_DAYS) {
-        setStep("backup");
-        setShow(true);
-      }
-    } catch {
-      /* */
-    }
-  }, []);
+  const step = useHydratedValue<"pin" | "recovery" | "backup" | null>(
+    () => STEP_KEYS.map((k) => localStorage.getItem(k) ?? "").join("|"),
+    computeOnboardingStep,
+    null
+  );
+  // Descartar el aviso es lo único que cambia tras la hidratación.
+  const [dismissed, setDismissed] = useState(false);
+  const show = !dismissed && step !== null;
 
   if (!show || !step) return null;
 
   const dismissWeek = () => {
     localStorage.setItem(DISMISS, String(Date.now() + 7 * 86400000));
-    setShow(false);
+    setDismissed(true);
   };
 
   const titles = {
@@ -94,7 +105,7 @@ export function SecurityOnboarding() {
           <Link
             href="/settings"
             className="flex-1 min-h-[44px] rounded-xl bg-primary text-primary-foreground text-sm font-semibold flex items-center justify-center"
-            onClick={() => setShow(false)}
+            onClick={() => setDismissed(true)}
           >
             Ir a Configuración
           </Link>

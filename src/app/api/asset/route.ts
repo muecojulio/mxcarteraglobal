@@ -3,6 +3,7 @@ import { sanitizeSymbol } from "@/lib/sanitize";
 import { getMarketDataProvider, detectRegion } from "@/lib/market-data";
 import { detectAssetType, isExcludedInstrument, normalizeYahooSymbol } from "@/lib/market-data/types";
 import { freeYahooSummary, publicSecCompanyFacts } from "@/lib/free-finance";
+import { withCachePolicy } from "@/lib/http-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -146,7 +147,7 @@ async function fetchFinnhubHistory(
 
 
 
-export async function GET(req: NextRequest) {
+async function get(req: NextRequest) {
   const symbol = sanitizeSymbol(req.nextUrl.searchParams.get("symbol"));
   const range = req.nextUrl.searchParams.get("range") || "3mo";
   if (!symbol) {
@@ -754,3 +755,5 @@ export async function GET(req: NextRequest) {
     );
   }
 }
+
+export const GET = withCachePolicy("/api/asset", get);

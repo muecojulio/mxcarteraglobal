@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { freeNasdaqCalendar, publicSecRecentIpos } from "@/lib/free-finance";
+import { withCachePolicy } from "@/lib/http-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ function numberOrUndefined(value: unknown): number | undefined {
   return Number.isFinite(number) ? number : undefined;
 }
 
-export async function GET(req: NextRequest) {
+async function get(req: NextRequest) {
   const from = validDate(
     req.nextUrl.searchParams.get("from"),
     new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10)
@@ -107,7 +108,7 @@ export async function GET(req: NextRequest) {
       note: source === "sec-edgar"
         ? "SEC EDGAR muestra registros S-1; no equivale a un calendario confirmado de IPOs."
         : "Calendario orientativo; los mercados pueden publicar o corregir fechas.",
-    }, { headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=3600" } });
+    });
   } catch (err) {
     console.error("IPO API error:", err);
     return NextResponse.json(
@@ -116,3 +117,5 @@ export async function GET(req: NextRequest) {
     );
   }
 }
+
+export const GET = withCachePolicy("/api/ipo", get);

@@ -162,11 +162,24 @@ export function saveWatchlist(symbols: string[]): void {
   persistSetJSON(PERSIST_KEYS.watchlist, uniq);
 }
 
+/**
+ * Posición de cartera tal como se guarda en `marketpulse_positions`.
+ *
+ * Antes este tipo declaraba `shares`, un campo que ninguna parte del código
+ * escribe ni lee (la app usa `quantity` en 21 sitios). Esa divergencia obligaba
+ * a `portfolio/page.tsx` a hacer `as any` al cargar y al guardar. Este tipo es
+ * ahora la única definición y las páginas la importan.
+ */
 export type Position = {
+  id: string;
   symbol: string;
-  shares: number;
-  avgCost?: number;
-  [k: string]: unknown;
+  name: string;
+  quantity: number;
+  avgCost: number;
+  region: "MX" | "US";
+  /** BMV / NASDAQ / etc. Opcional: las posiciones antiguas pueden no traerlo. */
+  market?: string;
+  currency: "MXN" | "USD";
 };
 
 export function loadPositions(): Position[] {

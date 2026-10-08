@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { freeNasdaqCalendar } from "@/lib/free-finance";
 import { isExcludedInstrument, normalizeYahooSymbol } from "@/lib/market-data/types";
 import { sanitizeSymbolList } from "@/lib/sanitize";
+import { withCachePolicy } from "@/lib/http-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,7 @@ type EventItem = {
  * GET /api/portfolio-events?symbols=AAPL,MSFT,FUNO11.MX
  * Próximos dividendos, earnings y splits solo de símbolos poseídos.
  */
-export async function GET(req: NextRequest) {
+async function get(req: NextRequest) {
   const symbols = [...new Set(
     sanitizeSymbolList(req.nextUrl.searchParams.get("symbols"), 40)
       .map(normalizeYahooSymbol)
@@ -227,3 +228,5 @@ export async function GET(req: NextRequest) {
     },
   });
 }
+
+export const GET = withCachePolicy("/api/portfolio-events", get);

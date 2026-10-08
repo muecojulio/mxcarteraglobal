@@ -4,6 +4,11 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useQuotes } from "@/lib/market-data/client";
 import { loadAlerts as loadAlertsStore, saveAlerts as saveAlertsStore } from "@/lib/persist";
+import {
+  useHydratedState,
+  useMounted,
+  localStorageIdentity,
+} from "@/lib/use-hydrated-value";
 
 type AlertCondition = "above" | "below";
 
@@ -17,6 +22,9 @@ type PriceAlert = {
   active: boolean;
 };
 
+/** Constante de módulo: useSyncExternalStore exige un snapshot estable. */
+const EMPTY_ALERTS: PriceAlert[] = [];
+
 function formatPrice(n: number) {
   return n.toLocaleString("es-MX", {
     minimumFractionDigits: 2,
@@ -25,19 +33,18 @@ function formatPrice(n: number) {
 }
 
 export default function AlertsPage() {
-  const [alerts, setAlerts] = useState<PriceAlert[]>([]);
-  const [ready, setReady] = useState(false);
+  const [alerts, setAlerts] = useHydratedState<PriceAlert[]>(
+    localStorageIdentity("marketpulse_price_alerts"),
+    () => loadAlertsStore() as PriceAlert[],
+    EMPTY_ALERTS
+  );
+  const ready = useMounted();
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({
     symbol: "",
     condition: "above" as AlertCondition,
     target: "",
   });
-
-  useEffect(() => {
-    setAlerts(loadAlertsStore() as PriceAlert[]);
-    setReady(true);
-  }, []);
 
   const symbols = useMemo(
     () =>
@@ -58,36 +65,42 @@ export default function AlertsPage() {
     return m;
   }, [quotesData]);
 
-  // Evaluar alertas
-  useEffect(() => {
-    if (!ready || priceMap.size === 0) return;
-    let changed = false;
+  // Marcar alertas disparadas cuando llegan precios nuevos.
+  //
+  // Esto es el patrón documentado de React para "ajustar estado cuando cambia
+  // un dato": setState durante el render, no dentro de un effect. Antes era un
+  // effect con setState síncrono (lo que marcaba react-hooks/set-state-in-effect).
+  const [evaluatedFor, setEvaluatedFor] = useState<Map<string, number> | null>(
+    null
+  );
+  if (ready && priceMap.size > 0 && evaluatedFor !== priceMap) {
     const next = alerts.map((a) => {
       if (!a.active || a.triggeredAt) return a;
       const price = priceMap.get(a.symbol.toUpperCase());
       if (price == null) return a;
       const hit =
         a.condition === "above" ? price >= a.target : price <= a.target;
-      if (hit) {
-        changed = true;
-        return {
-          ...a,
-          triggeredAt: new Date().toISOString(),
-          active: false,
-        };
-      }
-      return a;
+      return hit
+        ? { ...a, triggeredAt: new Date().toISOString(), active: false }
+        : a;
     });
-    if (changed) {
+    setEvaluatedFor(priceMap);
+    if (next.some((a, i) => a !== alerts[i])) setAlerts(next);
+  }
+
+  // Persistir es el único efecto: no hace setState.
+  useEffect(() => {
+    if (!ready) return;
+    saveAlertsStore(alerts);
+  }, [alerts, ready]);
+
+  const persist = useCallback(
+    (next: PriceAlert[]) => {
       setAlerts(next);
       saveAlertsStore(next);
-    }
-  }, [priceMap, alerts, ready]);
-
-  const persist = useCallback((next: PriceAlert[]) => {
-    setAlerts(next);
-    saveAlertsStore(next);
-  }, []);
+    },
+    [setAlerts]
+  );
 
   const addAlert = () => {
     const symbol = form.symbol.trim().toUpperCase();
