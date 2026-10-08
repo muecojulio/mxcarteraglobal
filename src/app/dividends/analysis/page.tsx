@@ -6,6 +6,11 @@ import { PortfolioEvents } from "@/components/PortfolioEvents";
 import { TaxEstimator } from "@/components/TaxEstimator";
 import { detectAssetType } from "@/lib/market-data/types";
 import { useQuotes } from "@/lib/market-data/client";
+import {
+  useHydratedValue,
+  useHydratedState,
+  localStorageIdentity,
+} from "@/lib/use-hydrated-value";
 
 type Position = {
   id: string;
@@ -58,6 +63,36 @@ function loadPositions(): Position[] {
   }
 }
 
+/** Constante de módulo: useSyncExternalStore exige un snapshot estable. */
+const EMPTY_POSITIONS: Position[] = [];
+
+/** Proyección de dividendos guardada, con los valores por defecto. */
+function readDivProjection(): {
+  divGrowth: number;
+  stockGrowth: number;
+  contribution: number;
+} {
+  const fallback = { divGrowth: 0.04, stockGrowth: 0.055, contribution: 9_000 };
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = localStorage.getItem(DIV_PROJ_KEY);
+    if (!raw) return fallback;
+    const j = JSON.parse(raw) as Record<string, unknown>;
+    return {
+      divGrowth:
+        j.divGrowth != null ? Number(j.divGrowth) : fallback.divGrowth,
+      stockGrowth:
+        j.stockGrowth != null ? Number(j.stockGrowth) : fallback.stockGrowth,
+      contribution:
+        j.contribution != null
+          ? Number(j.contribution)
+          : fallback.contribution,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 function formatMoney(value: number, currency = "MXN") {
   return new Intl.NumberFormat("es-MX", {
     style: "currency",
@@ -97,12 +132,17 @@ function annualFromPayments(list: DivPayment[]): number {
 }
 
 export default function DividendAnalysisPage() {
-  const [positions, setPositions] = useState<Position[]>([]);
+  // Posiciones, meta y proyección se hidratan durante el render y siguen siendo
+  // editables (antes: un effect con cinco setState síncronos).
+  const positions = useHydratedValue<Position[]>(
+    localStorageIdentity("marketpulse_positions"),
+    loadPositions,
+    EMPTY_POSITIONS
+  );
   const [annualMap, setAnnualMap] = useState<Record<string, number>>({});
   const [paymentsMap, setPaymentsMap] = useState<
     Record<string, DivPayment[]>
   >({});
-  const [loadingDivs, setLoadingDivs] = useState(false);
   const [upcoming, setUpcoming] = useState<
     Array<{
       symbol: string;
@@ -114,32 +154,32 @@ export default function DividendAnalysisPage() {
   const [growthMap, setGrowthMap] = useState<
     Record<string, { "1Y": number | null; "3Y": number | null; "5Y": number | null; "10Y": number | null }>
   >({});
-  const [goal, setGoal] = useState(60_000);
+  const [goal, setGoal] = useHydratedState(
+    localStorageIdentity(DIV_GOAL_KEY),
+    () => Number(localStorage.getItem(DIV_GOAL_KEY)) || 60_000,
+    60_000
+  );
   const [years, setYears] = useState(10);
-  const [divGrowth, setDivGrowth] = useState(0.04);
-  const [stockGrowth, setStockGrowth] = useState(0.055);
-  const [contribution, setContribution] = useState(9_000);
+  const [divGrowth, setDivGrowth] = useHydratedState(
+    localStorageIdentity(DIV_PROJ_KEY),
+    () => readDivProjection().divGrowth,
+    0.04
+  );
+  const [stockGrowth, setStockGrowth] = useHydratedState(
+    localStorageIdentity(DIV_PROJ_KEY),
+    () => readDivProjection().stockGrowth,
+    0.055
+  );
+  const [contribution, setContribution] = useHydratedState(
+    localStorageIdentity(DIV_PROJ_KEY),
+    () => readDivProjection().contribution,
+    9_000
+  );
   const [showGoal, setShowGoal] = useState(false);
   const [showProj, setShowProj] = useState(false);
   const [goalInput, setGoalInput] = useState("");
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
 
-  useEffect(() => {
-    setPositions(loadPositions());
-    try {
-      const g = localStorage.getItem(DIV_GOAL_KEY);
-      if (g) setGoal(Number(g) || 60_000);
-      const p = localStorage.getItem(DIV_PROJ_KEY);
-      if (p) {
-        const j = JSON.parse(p);
-        if (j.divGrowth != null) setDivGrowth(Number(j.divGrowth));
-        if (j.stockGrowth != null) setStockGrowth(Number(j.stockGrowth));
-        if (j.contribution != null) setContribution(Number(j.contribution));
-      }
-    } catch {
-      /* */
-    }
-  }, []);
 
   const symbols = useMemo(
     () => [...new Set(positions.map((p) => p.symbol))],
@@ -159,61 +199,74 @@ export default function DividendAnalysisPage() {
     return m;
   }, [quotesData]);
 
-  const loadDivs = useCallback(async () => {
+  // `loadingDivs` se deriva de para qué lista de símbolos terminó la carga, en
+  // vez de setearse en síncrono dentro del effect.
+  const [divsNonce, setDivsNonce] = useState(0);
+  const divsKey = `${symbols.join(",")}|${divsNonce}`;
+  const [divsSettledFor, setDivsSettledFor] = useState<string | null>(null);
+  const loadingDivs = symbols.length > 0 && divsSettledFor !== divsKey;
+
+  // Reintento: solo cambia la clave; el effect de abajo reacciona.
+  const loadDivs = useCallback(() => setDivsNonce((n) => n + 1), []);
+
+  useEffect(() => {
     if (!symbols.length) return;
-    setLoadingDivs(true);
-    const next: Record<string, number> = {};
-    const growth: Record<
-      string,
-      { "1Y": number | null; "3Y": number | null; "5Y": number | null; "10Y": number | null }
-    > = {};
+    let cancelled = false;
+    void (async () => {
+      const next: Record<string, number> = {};
+      const growth: Record<
+        string,
+        { "1Y": number | null; "3Y": number | null; "5Y": number | null; "10Y": number | null }
+      > = {};
 
-    // Calendario próximos (batch)
-    try {
-      const calRes = await fetch(
-        `/api/portfolio-dividends?symbols=${encodeURIComponent(symbols.join(","))}`
-      );
-      if (calRes.ok) {
-        const cal = await calRes.json();
-        setUpcoming(cal.upcoming || []);
-      }
-    } catch {
-      /* */
-    }
-
-    // secuencial para no saturar APIs free
-    const pays: Record<string, DivPayment[]> = {};
-    for (const s of symbols) {
-      const key = s.toUpperCase();
-      const list = await fetchDividendPayments(s);
-      pays[key] = list;
-      next[key] = annualFromPayments(list);
+      // Calendario próximos (batch)
       try {
-        const gRes = await fetch(
-          `/api/dividend-growth?symbol=${encodeURIComponent(s)}`
+        const calRes = await fetch(
+          `/api/portfolio-dividends?symbols=${encodeURIComponent(symbols.join(","))}`
         );
-        if (gRes.ok) {
-          const g = await gRes.json();
-          growth[key] = g.growth || {
-            "1Y": null,
-            "3Y": null,
-            "5Y": null,
-            "10Y": null,
-          };
+        if (!cancelled && calRes.ok) {
+          const cal = await calRes.json();
+          if (!cancelled) setUpcoming(cal.upcoming || []);
         }
       } catch {
         /* */
       }
-    }
-    setAnnualMap(next);
-    setPaymentsMap(pays);
-    setGrowthMap(growth);
-    setLoadingDivs(false);
-  }, [symbols]);
 
-  useEffect(() => {
-    loadDivs();
-  }, [loadDivs]);
+      // secuencial para no saturar APIs free
+      const pays: Record<string, DivPayment[]> = {};
+      for (const s of symbols) {
+        if (cancelled) return;
+        const key = s.toUpperCase();
+        const list = await fetchDividendPayments(s);
+        pays[key] = list;
+        next[key] = annualFromPayments(list);
+        try {
+          const gRes = await fetch(
+            `/api/dividend-growth?symbol=${encodeURIComponent(s)}`
+          );
+          if (gRes.ok) {
+            const g = await gRes.json();
+            growth[key] = g.growth || {
+              "1Y": null,
+              "3Y": null,
+              "5Y": null,
+              "10Y": null,
+            };
+          }
+        } catch {
+          /* */
+        }
+      }
+      if (cancelled) return;
+      setAnnualMap(next);
+      setPaymentsMap(pays);
+      setGrowthMap(growth);
+      setDivsSettledFor(divsKey);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [symbols, divsKey]);
 
   const rows: DivRow[] = useMemo(() => {
     return positions.map((p) => {

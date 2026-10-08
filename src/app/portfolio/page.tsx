@@ -12,6 +12,15 @@ import { RebalanceSuggestions } from "@/components/RebalanceSuggestions";
 import { TaxEstimator } from "@/components/TaxEstimator";
 import { PortfolioBackup } from "@/components/PortfolioBackup";
 import { useToast } from "@/components/Toast";
+import {
+  useHydratedState,
+  useMounted,
+  localStorageIdentity,
+} from "@/lib/use-hydrated-value";
+
+/** Constantes de módulo: useSyncExternalStore exige snapshots estables. */
+const EMPTY_POSITIONS: Position[] = [];
+const EMPTY_POINTS: Array<{ t: number; value: number }> = [];
 
 const initialPositions: Position[] = [];
 
@@ -32,17 +41,37 @@ function formatPercent(value: number) {
 
 export default function PortfolioPage() {
   const toast = useToast();
-  const [positions, setPositions] = useState<Position[]>([]);
-  const [hydrated, setHydrated] = useState(false);
+  // Posiciones y moneda se hidratan durante el render y siguen siendo editables
+  // (antes: effect con cuatro setState síncronos).
+  const [positions, setPositions] = useHydratedState<Position[]>(
+    localStorageIdentity("marketpulse_positions"),
+    loadPositions,
+    EMPTY_POSITIONS
+  );
+  const hydrated = useMounted();
   const [showAdd, setShowAdd] = useState(false);
   const [filter, setFilter] = useState<"ALL" | "MX" | "US">("ALL");
-  const [displayCurrency, setDisplayCurrency] = useState<"USD" | "MXN">("MXN");
+  const [displayCurrency, setDisplayCurrency] = useHydratedState<"USD" | "MXN">(
+    localStorageIdentity("mxcg_prefs"),
+    () => loadPrefs().displayCurrency ?? "MXN",
+    "MXN"
+  );
   const { fx, loading: fxLoading } = useUsdMxn();
   const [chartRange, setChartRange] = useState("1s");
-  const [chartPoints, setChartPoints] = useState<Array<{ t: number; value: number }>>([]);
+  const [chartPointsRaw, setChartPointsRaw] = useState<
+    Array<{ t: number; value: number }>
+  >([]);
   const [periodChange, setPeriodChange] = useState<number | null>(null);
   const [periodChangePct, setPeriodChangePct] = useState<number | null>(null);
-  const [chartLoading, setChartLoading] = useState(false);
+  // `chartLoading` se deriva de qué petición de histórico terminó, en vez de
+  // setearse en síncrono dentro del effect. Sin posiciones no hay gráfico.
+  const [chartSettledFor, setChartSettledFor] = useState<string | null>(null);
+  const holdingsKey = positions
+    .map((p) => `${p.symbol}:${p.quantity}`)
+    .join(",");
+  const chartKey = `${holdingsKey}|${chartRange}|${displayCurrency}`;
+  const chartLoading = holdingsKey !== "" && chartSettledFor !== chartKey;
+  const chartPoints = holdingsKey === "" ? EMPTY_POINTS : chartPointsRaw;
   const [form, setForm] = useState({
     symbol: "",
     name: "",
@@ -51,13 +80,6 @@ export default function PortfolioPage() {
     region: "US" as "MX" | "US",
   });
 
-
-  useEffect(() => {
-    setPositions(loadPositions());
-    const prefs = loadPrefs();
-    if (prefs.displayCurrency) setDisplayCurrency(prefs.displayCurrency);
-    setHydrated(true);
-  }, []);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -198,13 +220,9 @@ export default function PortfolioPage() {
   };
 
   useEffect(() => {
-    if (!positions.length) {
-      setChartPoints([]);
-      return;
-    }
+    if (!positions.length) return;
     let cancelled = false;
-    const load = async () => {
-      setChartLoading(true);
+    void (async () => {
       try {
         const holdings = positions
           .map((p) => `${p.symbol}:${p.quantity}`)
@@ -217,7 +235,7 @@ export default function PortfolioPage() {
         if (!res.ok) return;
         const data = await res.json();
         if (cancelled) return;
-        setChartPoints(data.points || []);
+        setChartPointsRaw(data.points || []);
         setPeriodChange(
           data.periodChange != null ? Number(data.periodChange) : null
         );
@@ -229,14 +247,13 @@ export default function PortfolioPage() {
       } catch {
         /* */
       } finally {
-        if (!cancelled) setChartLoading(false);
+        if (!cancelled) setChartSettledFor(chartKey);
       }
-    };
-    load();
+    })();
     return () => {
       cancelled = true;
     };
-  }, [positions, chartRange, displayCurrency]);
+  }, [positions, chartRange, displayCurrency, chartKey]);
 
   return (
     <div className="flex flex-col min-h-full">

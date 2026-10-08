@@ -5,6 +5,11 @@ import Link from "next/link";
 import { useQuotes } from "@/lib/market-data/client";
 import { useUsdMxn, toDisplay } from "@/lib/fx";
 import { RebalanceSuggestions } from "@/components/RebalanceSuggestions";
+import {
+  useHydratedValue,
+  useHydratedState,
+  localStorageIdentity,
+} from "@/lib/use-hydrated-value";
 
 type Position = {
   id: string;
@@ -42,6 +47,30 @@ function loadPositions(): Position[] {
     return JSON.parse(raw);
   } catch {
     return [];
+  }
+}
+
+/** Constante de módulo: useSyncExternalStore exige un snapshot estable. */
+const EMPTY_POSITIONS: Position[] = [];
+
+/** Proyección guardada, con los valores por defecto de la app. */
+function readProjection(): { stockGrowth: number; annualContribution: number } {
+  const fallback = { stockGrowth: 0.055, annualContribution: 9000 };
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = localStorage.getItem(PROJ_KEY);
+    if (!raw) return fallback;
+    const j = JSON.parse(raw) as Record<string, unknown>;
+    return {
+      stockGrowth:
+        j.stockGrowth != null ? Number(j.stockGrowth) : fallback.stockGrowth,
+      annualContribution:
+        j.annualContribution != null
+          ? Number(j.annualContribution)
+          : fallback.annualContribution,
+    };
+  } catch {
+    return fallback;
   }
 }
 
@@ -139,34 +168,36 @@ function Donut({
 }
 
 export default function PortfolioAnalysisPage() {
-  const [positions, setPositions] = useState<Position[]>([]);
-  const [goal, setGoal] = useState(3_000_000);
+  // Todo lo que viene del dispositivo se hidrata durante el render y sigue
+  // siendo editable (antes: un effect con cinco setState síncronos).
+  const positions = useHydratedValue<Position[]>(
+    localStorageIdentity(POS_KEY),
+    loadPositions,
+    EMPTY_POSITIONS
+  );
+  const [goal, setGoal] = useHydratedState(
+    localStorageIdentity(GOAL_KEY),
+    () => Number(localStorage.getItem(GOAL_KEY)) || 3_000_000,
+    3_000_000
+  );
   const [years, setYears] = useState(1);
-  const [stockGrowth, setStockGrowth] = useState(0.055);
-  const [annualContribution, setAnnualContribution] = useState(9000);
+  const [stockGrowth, setStockGrowth] = useHydratedState(
+    localStorageIdentity(PROJ_KEY),
+    () => readProjection().stockGrowth,
+    0.055
+  );
+  const [annualContribution, setAnnualContribution] = useHydratedState(
+    localStorageIdentity(PROJ_KEY),
+    () => readProjection().annualContribution,
+    9000
+  );
   const [showGoalEdit, setShowGoalEdit] = useState(false);
   const [goalInput, setGoalInput] = useState("");
   const [showProjEdit, setShowProjEdit] = useState(false);
+  // No se hidrata: la moneda de esta pantalla siempre arranca en MXN.
   const [displayCurrency, setDisplayCurrency] = useState<"USD" | "MXN">("MXN");
   const { fx, loading: fxLoading } = useUsdMxn();
   const usdMxn = fx?.usdMxn ?? 17;
-
-  useEffect(() => {
-    setPositions(loadPositions());
-    try {
-      const g = localStorage.getItem(GOAL_KEY);
-      if (g) setGoal(Number(g) || 3_000_000);
-      const p = localStorage.getItem(PROJ_KEY);
-      if (p) {
-        const j = JSON.parse(p);
-        if (j.stockGrowth != null) setStockGrowth(Number(j.stockGrowth));
-        if (j.annualContribution != null)
-          setAnnualContribution(Number(j.annualContribution));
-      }
-    } catch {
-      /* */
-    }
-  }, []);
 
   const symbols = useMemo(
     () => [...new Set(positions.map((p) => p.symbol))],
