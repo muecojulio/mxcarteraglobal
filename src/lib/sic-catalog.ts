@@ -7,6 +7,7 @@ import { normalizeSearchText } from "./search-text";
  */
 
 import { normalizeYahooSymbol } from "./market-data/types";
+import { buildCatalogIndex, createIndexRegistry } from "./catalog-index";
 
 export type SicKind = "stock" | "etf";
 
@@ -814,29 +815,37 @@ export const SIC_UCITS: SicItem[] = [
 
 export const SIC_ALL: SicItem[] = [...SIC_STOCKS, ...SIC_ETFS, ...SIC_UCITS];
 
-export function searchSic(q: string, kind?: SicKind | "ALL" | "ucits"): SicItem[] {
-  const rawNeedle = normalizeSearchText(q);
-  const canonicalNeedle = normalizeYahooSymbol(rawNeedle);
-  const needles = [...new Set([rawNeedle, canonicalNeedle])];
-  const pool =
-    kind === "stock"
-      ? SIC_STOCKS
-      : kind === "etf"
-      ? [...SIC_ETFS, ...SIC_UCITS]
-      : kind === "ucits"
-      ? SIC_UCITS
-      : SIC_ALL;
-  if (!rawNeedle) return pool;
-  return pool.filter((item) =>
-    needles.some(
-      (needle) =>
-        item.symbol.toUpperCase().includes(needle) ||
-        normalizeSearchText(item.name).includes(needle)
+type SicPoolKey = SicKind | "ALL" | "ucits";
+
+const sicIndexes = createIndexRegistry<SicItem>();
+
+function sicIndex(kind: SicPoolKey | undefined) {
+  return sicIndexes.get(kind ?? "ALL", () =>
+    buildCatalogIndex(
+      kind === "stock"
+        ? SIC_STOCKS
+        : kind === "etf"
+        ? [...SIC_ETFS, ...SIC_UCITS]
+        : kind === "ucits"
+        ? SIC_UCITS
+        : SIC_ALL
     )
   );
 }
 
+/** Índice global del catálogo, para búsqueda exacta de símbolo en O(1). */
+const sicAllIndex = () => sicIndexes.get("__all", () => buildCatalogIndex(SIC_ALL));
+
+export function searchSic(q: string, kind?: SicKind | "ALL" | "ucits"): SicItem[] {
+  const rawNeedle = normalizeSearchText(q);
+  const index = sicIndex(kind);
+  if (!rawNeedle) return index.items;
+  const canonicalNeedle = normalizeYahooSymbol(rawNeedle);
+  const needles = [...new Set([rawNeedle, canonicalNeedle])];
+  return index.search(needles);
+}
+
 export function isSicSymbol(symbol: string): boolean {
   const s = normalizeYahooSymbol(symbol).replace(/\.MX$/, "");
-  return SIC_ALL.some((i) => i.symbol.toUpperCase() === s);
+  return sicAllIndex().hasSymbol(s);
 }

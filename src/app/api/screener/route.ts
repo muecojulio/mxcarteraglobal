@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMarketDataProvider } from "@/lib/market-data";
 import { isExcludedInstrument, normalizeYahooSymbol } from "@/lib/market-data/types";
+import { withCachePolicy } from "@/lib/http-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -83,7 +84,7 @@ async function fmpMovers(preset: string, key: string): Promise<ScreenerRow[]> {
   }
 }
 
-export async function GET(req: NextRequest) {
+async function get(req: NextRequest) {
   const params = req.nextUrl.searchParams;
   const preset = params.get("preset") || "universe";
   // gainers | losers | actives | universe
@@ -135,8 +136,7 @@ export async function GET(req: NextRequest) {
     else rows.sort((a, b) => b.changePercent - a.changePercent);
 
     return NextResponse.json(
-      { preset, region, results: rows, count: rows.length, source, excluded: ["forex", "cryptocurrencies"] },
-      { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" } }
+      { preset, region, results: rows, count: rows.length, source, excluded: ["forex", "cryptocurrencies"] }
     );
   } catch (err) {
     console.error("Screener error:", err);
@@ -146,3 +146,5 @@ export async function GET(req: NextRequest) {
     );
   }
 }
+
+export const GET = withCachePolicy("/api/screener", get);

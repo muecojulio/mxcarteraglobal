@@ -51,6 +51,9 @@ export default function LegalBanner() {
           <Link href="/legal" className="text-[11px] text-muted">
             Términos
           </Link>
+          <Link href="/legal/privacidad" className="text-[11px] text-muted">
+            Privacidad
+          </Link>
           <button
             type="button"
             className="ml-auto text-[11px] font-semibold px-3 py-1.5 rounded-full bg-primary text-primary-foreground"

@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
+import { withCachePolicy } from "@/lib/http-cache";
 
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/fx — USD/MXN lo más actualizado posible (gratis)
  */
-export async function GET() {
+async function get() {
   let usdMxn: number | null = null;
   let source = "";
   let asOf: string | null = null;
@@ -101,3 +102,5 @@ export async function GET() {
     usingRealData: true,
   });
 }
+
+export const GET = withCachePolicy("/api/fx", get);

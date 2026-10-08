@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCompositeProvider, detectRegion } from "@/lib/market-data";
+import { withCachePolicy } from "@/lib/http-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,7 @@ function annualTotals(
  * GET /api/dividend-growth?symbol=AAPL
  * Devuelve crecimiento de dividendos 1A, 3A, 5A, 10A (%)
  */
-export async function GET(req: NextRequest) {
+async function get(req: NextRequest) {
   const symbol = req.nextUrl.searchParams.get("symbol")?.trim();
   if (!symbol) {
     return NextResponse.json(
@@ -76,10 +77,11 @@ export async function GET(req: NextRequest) {
       return cagr(past, latestAnnual, n);
     }
 
-    let growth1Y = growthOver(1);
-    let growth3Y = growthOver(3);
+    const growth1Y = growthOver(1);
+    const growth3Y = growthOver(3);
+    // growth5Y sí se reasigna más abajo con el dato oficial de Finnhub.
     let growth5Y = growthOver(5);
-    let growth10Y = growthOver(10);
+    const growth10Y = growthOver(10);
 
     // Finnhub a veces trae dividendGrowthRate5Y oficial
     let finnhub5Y: number | null = null;
@@ -128,3 +130,5 @@ export async function GET(req: NextRequest) {
     );
   }
 }
+
+export const GET = withCachePolicy("/api/dividend-growth", get);

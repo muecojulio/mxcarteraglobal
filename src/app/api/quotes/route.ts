@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMarketDataProvider } from "@/lib/market-data";
 import { sanitizeSymbolList } from "@/lib/sanitize";
+import { withCachePolicy } from "@/lib/http-cache";
 
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/quotes?symbols=AAPL,MSFT,AMXL.MX
  */
-export async function GET(req: NextRequest) {
+async function get(req: NextRequest) {
   const symbolsParam = req.nextUrl.searchParams.get("symbols")?.trim();
 
   if (!symbolsParam) {
@@ -44,3 +45,5 @@ export async function GET(req: NextRequest) {
     );
   }
 }
+
+export const GET = withCachePolicy("/api/quotes", get);

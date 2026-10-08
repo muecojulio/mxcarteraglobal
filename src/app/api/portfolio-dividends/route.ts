@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { freeNasdaqCalendar } from "@/lib/free-finance";
 import { isExcludedInstrument, normalizeYahooSymbol } from "@/lib/market-data/types";
 import { sanitizeSymbolList } from "@/lib/sanitize";
+import { withCachePolicy } from "@/lib/http-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ function numberOrNull(value: unknown): number | null {
  * GET /api/portfolio-dividends?symbols=AAPL,MSFT,AMXL.MX
  * Calendario público Nasdaq primero; FMP solo completa símbolos faltantes.
  */
-export async function GET(req: NextRequest) {
+async function get(req: NextRequest) {
   const symbols = sanitizeSymbolList(req.nextUrl.searchParams.get("symbols"), 40)
     .map(normalizeYahooSymbol)
     .filter((symbol) => !isExcludedInstrument(symbol));
@@ -108,7 +109,8 @@ export async function GET(req: NextRequest) {
       usingRealData: upcoming.length > 0,
       source: sources.length ? sources.join("+") : "none",
       sourcesAttempted: ["nasdaq-public", ...(fmp ? ["fmp-fallback"] : [])],
-    },
-    { headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=3600" } }
+    }
   );
 }
+
+export const GET = withCachePolicy("/api/portfolio-dividends", get);

@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { getMarketDataProvider } from "@/lib/market-data";
+import { withCachePolicy } from "@/lib/http-cache";
 
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/indices
  */
-export async function GET() {
+async function get() {
   try {
     const provider = getMarketDataProvider();
     const indices = provider.getIndices
@@ -27,3 +28,5 @@ export async function GET() {
     );
   }
 }
+
+export const GET = withCachePolicy("/api/indices", get);

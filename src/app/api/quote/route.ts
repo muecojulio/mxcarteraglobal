@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sanitizeSymbol } from "@/lib/sanitize";
 import { getMarketDataProvider } from "@/lib/market-data";
+import { withCachePolicy } from "@/lib/http-cache";
 
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/quote?symbol=AAPL
  */
-export async function GET(req: NextRequest) {
+async function get(req: NextRequest) {
   const symbol = sanitizeSymbol(req.nextUrl.searchParams.get("symbol"));
 
   if (!symbol) {
@@ -40,3 +41,5 @@ export async function GET(req: NextRequest) {
     );
   }
 }
+
+export const GET = withCachePolicy("/api/quote", get);

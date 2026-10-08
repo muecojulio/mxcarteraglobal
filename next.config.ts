@@ -12,7 +12,17 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
-          ...(process.env.NODE_ENV === "development" ? [] : [{ key: "X-Frame-Options", value: "DENY" }]),
+          ...(process.env.NODE_ENV === "development"
+            ? []
+            : [
+                { key: "X-Frame-Options", value: "DENY" },
+                // HSTS: fuerza HTTPS 2 años. Solo en producción para no fijarlo
+                // sobre localhost durante el desarrollo.
+                {
+                  key: "Strict-Transport-Security",
+                  value: "max-age=63072000; includeSubDomains; preload",
+                },
+              ]),
           { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           {

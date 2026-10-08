@@ -19,6 +19,7 @@ import {
   paysDividend,
 } from "./dividend-payers";
 import { normalizeYahooSymbol } from "./market-data/types";
+import { buildCatalogIndex, createIndexRegistry } from "./catalog-index";
 
 export type MxKind = "stock" | "etf" | "fibra" | "bond_etf";
 
@@ -205,6 +206,33 @@ export const MX_UNIVERSE: MxItem[] = (() => {
   return [...map.values()];
 })();
 
+/**
+ * Índice del universo local, construido de forma perezosa y memoizado: la
+ * búsqueda ya no re-normaliza los ~900 nombres del catálogo en cada tecla
+ * escrita. `extraHaystacks` conserva el símbolo sin `.MX`, que el código
+ * anterior también comparaba.
+ */
+const mxIndexes = createIndexRegistry<MxItem>();
+
+function mxIndex() {
+  return mxIndexes.get("MX_UNIVERSE", () =>
+    buildCatalogIndex<MxItem>(MX_UNIVERSE, (item) => [
+      item.symbol.replace(/\.MX$/, ""),
+    ])
+  );
+}
+
+/** Símbolos del universo sin sufijo `.MX`, para pertenencia en O(1). */
+let mxBareSymbols: Set<string> | null = null;
+function bareSymbols(): Set<string> {
+  if (!mxBareSymbols) {
+    mxBareSymbols = new Set(
+      MX_UNIVERSE.map((i) => i.symbol.toUpperCase().replace(/\.MX$/, ""))
+    );
+  }
+  return mxBareSymbols;
+}
+
 export function normalizeMxSymbol(raw: string): string {
   return normalizeYahooSymbol(raw);
 }
@@ -213,11 +241,7 @@ export function isInMxUniverse(symbol: string): boolean {
   const s = normalizeMxSymbol(symbol);
   const bare = s.replace(/\.MX$/, "");
   if (isSicSymbol(bare) || isSicSymbol(s)) return true;
-  return MX_UNIVERSE.some(
-    (i) =>
-      i.symbol.toUpperCase() === s ||
-      i.symbol.toUpperCase().replace(/\.MX$/, "") === bare
-  );
+  return mxIndex().hasSymbol(s) || bareSymbols().has(bare);
 }
 
 export function searchMxUniverse(
@@ -235,14 +259,7 @@ export function searchMxUniverse(
   const canonicalNeedle = normalizeYahooSymbol(rawNeedle);
   const needles = [...new Set([rawNeedle, canonicalNeedle])];
 
-  const local = MX_UNIVERSE.filter((item) =>
-    needles.some(
-      (needle) =>
-        item.symbol.toUpperCase().includes(needle) ||
-        normalizeSearchText(item.name).includes(needle) ||
-        item.symbol.replace(/\.MX$/, "").includes(needle)
-    )
-  );
+  const local = mxIndex().search(needles);
 
   const fromSic = searchSic(rawNeedle).map(sicToMx);
 

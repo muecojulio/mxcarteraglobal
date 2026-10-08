@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sanitizeSymbol } from "@/lib/sanitize";
 import { getCompositeProvider, isUsingRealData, detectRegion } from "@/lib/market-data";
+import { withCachePolicy } from "@/lib/http-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
  *
  * MX → DataBursatil | US → FMP
  */
-export async function GET(req: NextRequest) {
+async function get(req: NextRequest) {
   const symbol = sanitizeSymbol(req.nextUrl.searchParams.get("symbol"));
 
   if (!symbol) {
@@ -45,3 +46,5 @@ export async function GET(req: NextRequest) {
     );
   }
 }
+
+export const GET = withCachePolicy("/api/dividends", get);

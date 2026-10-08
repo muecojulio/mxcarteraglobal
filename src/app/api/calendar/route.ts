@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { freeNasdaqCalendar, publicSecRecentIpos } from "@/lib/free-finance";
 import { isExcludedInstrument, normalizeYahooSymbol } from "@/lib/market-data/types";
+import { withCachePolicy } from "@/lib/http-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,7 @@ function addDays(iso: string, days: number) {
   return d.toISOString().slice(0, 10);
 }
 
-export async function GET(req: NextRequest) {
+async function get(req: NextRequest) {
   const from =
     req.nextUrl.searchParams.get("from") || todayISO();
   const to =
@@ -319,3 +320,5 @@ export async function GET(req: NextRequest) {
     );
   }
 }
+
+export const GET = withCachePolicy("/api/calendar", get);

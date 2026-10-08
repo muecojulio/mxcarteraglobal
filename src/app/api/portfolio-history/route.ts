@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withCachePolicy } from "@/lib/http-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -69,7 +70,7 @@ async function yahooSeries(
  * GET /api/portfolio-history?holdings=AAPL:10,MSFT:5,FUNO11.MX:100&range=1m&display=MXN
  * holdings = symbol:quantity pairs
  */
-export async function GET(req: NextRequest) {
+async function get(req: NextRequest) {
   const raw = req.nextUrl.searchParams.get("holdings") || "";
   const rangeKey = (req.nextUrl.searchParams.get("range") || "1m").toLowerCase();
   const display = (req.nextUrl.searchParams.get("display") || "MXN").toUpperCase() as
@@ -174,3 +175,5 @@ export async function GET(req: NextRequest) {
     holdings: holdings.length,
   });
 }
+
+export const GET = withCachePolicy("/api/portfolio-history", get);
