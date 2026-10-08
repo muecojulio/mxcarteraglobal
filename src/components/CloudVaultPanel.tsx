@@ -131,6 +131,11 @@ export function CloudVaultPanel() {
           teléfono. La nube solo guarda un paquete ilegible. Para pasar a otro
           dispositivo usa el mismo NIP (si lo configuraste).
         </p>
+        <p className="text-[11px] text-muted leading-relaxed">
+          La nube no puede leer el paquete, pero quien consiga el ID podría
+          intentar adivinar tu clave: entre más larga, mejor (un NIP de 4
+          dígitos es corto para eso).
+        </p>
         <p className="text-xs">
           Estado del cifrado:{" "}
           <span className="font-medium">

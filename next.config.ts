@@ -1,9 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   poweredByHeader: false,
   allowedDevOrigins: ["*.e2b.app"],
   async headers() {
@@ -37,7 +34,12 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https:",
               "font-src 'self' data:",
-              "connect-src 'self'",
+              // `connect-src` también gobierna los WebSocket: sin el origen wss
+              // de Finnhub, la CSP bloqueaba los precios en vivo
+              // (`new WebSocket("wss://ws.finnhub.io?token=…")` en
+              // `src/lib/market-data/realtime.ts`) y el badge se quedaba en
+              // "sin conexión". `'self'` cubre el resto de fetch de la app.
+              "connect-src 'self' wss://ws.finnhub.io",
               process.env.NODE_ENV === "development" ? "frame-ancestors 'self' https://*.arena.ai https://arena.ai https://*.e2b.app" : "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",

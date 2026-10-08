@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { clientKeyFromForwardedFor, clientKeyFromRealIp } from "./client-ip";
 
 const WINDOW_MS = 60_000;
 const MAX_PER_WINDOW = 45;
@@ -19,9 +20,15 @@ type Bucket = { start: number; count: number };
 const buckets = new Map<string, Bucket>();
 
 function clientKey(req: NextRequest): string {
-  const xf = req.headers.get("x-forwarded-for");
-  if (xf) return xf.split(",")[0]!.trim();
-  return req.headers.get("x-real-ip") || "local";
+  // El primer valor de `x-forwarded-for` lo controla quien llama; el último lo
+  // puso el proxy de confianza (ver `client-ip.ts`).
+  const forwarded = clientKeyFromForwardedFor(req.headers.get("x-forwarded-for"));
+  if (forwarded) return forwarded;
+
+  const real = clientKeyFromRealIp(req.headers.get("x-real-ip"));
+  if (real) return real;
+
+  return "local";
 }
 
 function sweep(now: number): void {
