@@ -17,6 +17,7 @@ import {
   DIV_ETFS,
   paysDividend,
 } from "./dividend-payers";
+import { normalizeYahooSymbol } from "./market-data/types";
 
 export type MxKind = "stock" | "etf" | "fibra" | "bond_etf";
 
@@ -204,7 +205,7 @@ export const MX_UNIVERSE: MxItem[] = (() => {
 })();
 
 export function normalizeMxSymbol(raw: string): string {
-  return raw.trim().toUpperCase().replace(/\s+/g, "");
+  return normalizeYahooSymbol(raw);
 }
 
 export function isInMxUniverse(symbol: string): boolean {
@@ -228,17 +229,21 @@ export function searchMxUniverse(
   region: string;
   exchange: string;
 }> {
-  const needle = q.trim().toUpperCase();
-  if (!needle) return [];
+  const rawNeedle = q.trim().toUpperCase();
+  if (!rawNeedle) return [];
+  const canonicalNeedle = normalizeYahooSymbol(rawNeedle);
+  const needles = [...new Set([rawNeedle, canonicalNeedle])];
 
-  const local = MX_UNIVERSE.filter(
-    (i) =>
-      i.symbol.toUpperCase().includes(needle) ||
-      i.name.toUpperCase().includes(needle) ||
-      i.symbol.replace(/\.MX$/, "").includes(needle)
+  const local = MX_UNIVERSE.filter((item) =>
+    needles.some(
+      (needle) =>
+        item.symbol.toUpperCase().includes(needle) ||
+        item.name.toUpperCase().includes(needle) ||
+        item.symbol.replace(/\.MX$/, "").includes(needle)
+    )
   );
 
-  const fromSic = searchSic(q).map(sicToMx);
+  const fromSic = searchSic(rawNeedle).map(sicToMx);
 
   const map = new Map<string, MxItem>();
   for (const i of [...local, ...fromSic]) {

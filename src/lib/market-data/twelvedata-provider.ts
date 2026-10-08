@@ -76,6 +76,7 @@ export class TwelveDataProvider implements MarketDataProvider {
       ".TO": "TSX",
       ".SW": "SIX",
       ".MI": "MIL",
+      ".MC": "BME",
       ".AS": "EURONEXT",
       ".BR": "EURONEXT",
     };

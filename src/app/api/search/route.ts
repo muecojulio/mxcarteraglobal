@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { searchMxUniverse, isInMxUniverse } from "@/lib/mx-universe";
+import { searchMxUniverse } from "@/lib/mx-universe";
+import { freeYahooSearch } from "@/lib/free-finance";
+import { isExcludedInstrument, normalizeYahooSymbol } from "@/lib/market-data/types";
 
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/search?q=apple
- * Solo BMV, BIVA y SIC (universo México).
+ * Primero busca en BMV/BIVA/SIC; Yahoo amplía la búsqueda si el catálogo local
+ * no devuelve coincidencias. Forex y cripto no se incluyen.
  */
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q")?.trim().slice(0, 40);
-
-  if (!q || q.length < 1) {
+  if (!q) {
     return NextResponse.json(
       { error: "Parámetro 'q' requerido" },
       { status: 400 }
@@ -18,19 +20,34 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const results = searchMxUniverse(q, 20);
+    const localResults = searchMxUniverse(q, 20);
+    const publicResults = localResults.length < 10 ? await freeYahooSearch(q) : [];
+    const seen = new Set<string>();
+    const results = [...localResults, ...publicResults]
+      .filter((result) => {
+        const symbol = normalizeYahooSymbol(result.symbol);
+        if (!symbol || isExcludedInstrument(symbol, result.type)) return false;
+        if (seen.has(symbol)) return false;
+        seen.add(symbol);
+        result.symbol = symbol;
+        return true;
+      })
+      .slice(0, 20);
 
-    return NextResponse.json({
-      results,
-      count: results.length,
-      universe: "BMV+BIVA+SIC",
-      usingRealData: true,
-      provider: "mx-universe",
-      hint:
-        results.length === 0
-          ? "No está en el catálogo BMV / BIVA / SIC de la app. Puedes ampliar el catálogo más adelante."
-          : undefined,
-    });
+    return NextResponse.json(
+      {
+        results,
+        count: results.length,
+        universe: "BMV+BIVA+SIC+Yahoo-public",
+        usingRealData: true,
+        provider: publicResults.length ? "sic+yahoo" : "sic",
+        hint:
+          results.length === 0
+            ? "No se encontró el símbolo en el catálogo ni en Yahoo Finance."
+            : undefined,
+      },
+      { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=900" } }
+    );
   } catch (err) {
     console.error("API /search error:", err);
     return NextResponse.json(

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sanitizeSymbol } from "@/lib/sanitize";
 import { getMarketDataProvider, detectRegion } from "@/lib/market-data";
-import { detectAssetType } from "@/lib/market-data/types";
+import { detectAssetType, isExcludedInstrument, normalizeYahooSymbol } from "@/lib/market-data/types";
+import { freeYahooSummary, publicSecCompanyFacts } from "@/lib/free-finance";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,7 @@ const YAHOO_HISTORY_ALIASES: Record<string, string[]> = {
 };
 
 function yahooHistoryCandidates(symbol: string): string[] {
-  const sym = symbol.trim().toUpperCase();
+  const sym = normalizeYahooSymbol(symbol);
   const out: string[] = [];
   const add = (s: string) => {
     if (s && !out.includes(s)) out.push(s);
@@ -104,108 +105,46 @@ async function fetchYahooHistory(symbol: string, rangeKey = "3mo"): Promise<Cand
   return [];
 }
 
-
-async function fetchYahooQuoteStats(symbol: string): Promise<{
-  high52?: number | null;
-  low52?: number | null;
-  pe?: number | null;
-  marketCap?: number | null;
-  divYield?: number | null;
-  avgVolume?: number | null;
-  dayHigh?: number | null;
-  dayLow?: number | null;
-  volume?: number | null;
-  expenseRatio?: number | null;
-}> {
-  const modules = "price,summaryDetail,defaultKeyStatistics,fundProfile";
-  for (const candidate of yahooHistoryCandidates(symbol)) {
-    try {
-      const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(
-        candidate
-      )}?modules=${modules}`;
-      const res = await fetch(url, {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; MX Cartera Global/1.0)" },
-        next: { revalidate: 600 },
-      });
-      if (!res.ok) continue;
-      const data = await res.json();
-      const r = data?.quoteSummary?.result?.[0];
-      if (!r) continue;
-      const price = r.price || {};
-      const sum = r.summaryDetail || {};
-      const keys = r.defaultKeyStatistics || {};
-      const raw = (o: { raw?: number } | number | null | undefined) => {
-        if (o == null) return null;
-        if (typeof o === "number") return o;
-        return o.raw != null ? Number(o.raw) : null;
-      };
-      const high52 = raw(sum.fiftyTwoWeekHigh) ?? raw(keys.fiftyTwoWeekHigh);
-      const low52 = raw(sum.fiftyTwoWeekLow) ?? raw(keys.fiftyTwoWeekLow);
-      const pe = raw(sum.trailingPE) ?? raw(keys.trailingPE) ?? raw(sum.forwardPE);
-      const marketCap = raw(price.marketCap) ?? raw(sum.marketCap);
-      let divYield = raw(sum.dividendYield) ?? raw(sum.yield);
-      // Yahoo a veces devuelve yield en fracción (0.03 = 3%)
-      if (divYield != null && divYield > 0 && divYield < 1) divYield = divYield * 100;
-      let expenseRatio =
-        raw(keys.annualReportExpenseRatio) ??
-        raw(keys.expenseRatio) ??
-        null;
-      try {
-        const fees =
-          r.fundProfile?.feesExpensesInvestment ||
-          r.fundProfile?.feesExpenses ||
-          {};
-        const er =
-          raw(fees.annualReportExpenseRatio) ??
-          raw(fees.totalFees) ??
-          raw(fees.expenseRatio);
-        if (er != null && expenseRatio == null) expenseRatio = er;
-      } catch {
-        /* */
-      }
-      // Normalizar a porcentaje anual (ej. 0.03 o 0.0003 → 0.03%)
-      if (expenseRatio != null && expenseRatio > 0) {
-        if (expenseRatio < 0.01) expenseRatio = expenseRatio * 100;
-        else if (expenseRatio < 0.5 && expenseRatio > 0.01) {
-          // 0.03–0.49: podría ser ya % o fracción; valores típicos ETF 0.03–0.75%
-          // si viene 0.03 asumir ya es %
-        }
-      }
-      const avgVolume =
-        raw(sum.averageVolume) ??
-        raw(sum.averageDailyVolume10Day) ??
-        raw(keys.averageVolume);
-      const dayHigh = raw(price.regularMarketDayHigh) ?? raw(sum.dayHigh);
-      const dayLow = raw(price.regularMarketDayLow) ?? raw(sum.dayLow);
-      const volume = raw(price.regularMarketVolume) ?? raw(sum.volume);
-      if (
-        high52 != null ||
-        low52 != null ||
-        pe != null ||
-        marketCap != null ||
-        divYield != null ||
-        avgVolume != null ||
-        expenseRatio != null
-      ) {
-        return {
-          high52,
-          low52,
-          pe,
-          marketCap,
-          divYield,
-          avgVolume: avgVolume != null ? avgVolume / 1e6 : null,
-          dayHigh,
-          dayLow,
-          volume,
-          expenseRatio,
-        };
-      }
-    } catch {
-      /* siguiente */
-    }
+/** Finnhub historial con API key solo si Yahoo no publicó velas. */
+async function fetchFinnhubHistory(
+  symbol: string,
+  rangeKey: string,
+  token: string
+): Promise<Candle[]> {
+  const interval = yahooRangeParams(rangeKey).interval;
+  const resolution = interval === "5m" ? "5" : interval === "30m" ? "30" : interval === "1wk" ? "W" : interval === "1mo" ? "M" : "D";
+  const dayCounts: Record<string, number> = {
+    "1d": 2, "1w": 7, "5d": 7, "1mo": 32, "3mo": 95, "6mo": 185,
+    "1y": 370, "5y": 1830, max: 3650,
+  };
+  const now = new Date();
+  const to = Math.floor(now.getTime() / 1000);
+  const fromDate = rangeKey === "ytd" ? new Date(Date.UTC(now.getUTCFullYear(), 0, 1)) : new Date(now.getTime() - (dayCounts[rangeKey] || 95) * 86_400_000);
+  const from = Math.floor(fromDate.getTime() / 1000);
+  try {
+    const url = `https://finnhub.io/api/v1/stock/candle?symbol=${encodeURIComponent(symbol)}&resolution=${resolution}&from=${from}&to=${to}&token=${encodeURIComponent(token)}`;
+    const res = await fetch(url, { next: { revalidate: 300 } });
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (data?.s !== "ok" || !Array.isArray(data.t)) return [];
+    return data.t.flatMap((timestamp: number, index: number) => {
+      const close = Number(data.c?.[index]);
+      if (!Number.isFinite(close)) return [];
+      return [{
+        t: Number(timestamp),
+        o: Number(data.o?.[index]) || close,
+        h: Number(data.h?.[index]) || close,
+        l: Number(data.l?.[index]) || close,
+        c: close,
+        v: Number(data.v?.[index]) || undefined,
+      }];
+    });
+  } catch {
+    return [];
   }
-  return {};
 }
+
+
 
 export async function GET(req: NextRequest) {
   const symbol = sanitizeSymbol(req.nextUrl.searchParams.get("symbol"));
@@ -213,35 +152,111 @@ export async function GET(req: NextRequest) {
   if (!symbol) {
     return NextResponse.json({ error: "symbol requerido" }, { status: 400 });
   }
+  if (isExcludedInstrument(symbol)) {
+    return NextResponse.json(
+      { error: "La ficha solo admite acciones, ETFs y otros valores bursátiles; Forex y cripto están excluidos." },
+      { status: 400 }
+    );
+  }
 
   const provider = getMarketDataProvider();
-  const region = detectRegion(symbol);
-  const assetType = detectAssetType(symbol);
+  const sym = normalizeYahooSymbol(symbol);
+  const region = detectRegion(sym);
+  const assetType = detectAssetType(sym);
   const finnhub = process.env.FINNHUB_API_KEY?.trim();
   const fmp = process.env.FMP_API_KEY?.trim();
-  const sym = symbol.toUpperCase();
 
   try {
-    const [quote, history] = await Promise.all([
+    const [quote, yahooHistory, yahooSummary, secFacts] = await Promise.all([
       provider.getQuote(sym),
       fetchYahooHistory(sym, range),
+      freeYahooSummary(sym),
+      region === "US" && assetType === "stock"
+        ? publicSecCompanyFacts(sym)
+        : Promise.resolve(null),
     ]);
+    let history = yahooHistory;
+    let historySource: string | null = history.length ? "yahoo-public" : null;
+    if (!history.length && finnhub && region === "US") {
+      history = await fetchFinnhubHistory(sym, range, finnhub);
+      if (history.length) historySource = "finnhub-fallback";
+    }
 
-    if (!quote && history.length === 0) {
+    if (!quote && history.length === 0 && yahooSummary.price == null && !secFacts) {
       return NextResponse.json(
         { error: "Activo no encontrado", symbol: sym },
         { status: 404 }
       );
     }
 
-    let profile: Record<string, unknown> | null = null;
-    let metrics: Record<string, number | null> = {};
+    let profile: Record<string, unknown> | null =
+      yahooSummary.name || quote?.name
+        ? {
+            name: yahooSummary.name || quote?.name,
+            exchange: yahooSummary.exchange || quote?.exchange || quote?.market,
+            currency: yahooSummary.currency || quote?.currency,
+          }
+        : null;
+    let metrics: Record<string, number | null> = {
+      pe: yahooSummary.pe,
+      peg: yahooSummary.peg,
+      pb: yahooSummary.pb,
+      ps: yahooSummary.ps,
+      marketCap: yahooSummary.marketCap,
+      high52: yahooSummary.high52,
+      low52: yahooSummary.low52,
+      divYield: yahooSummary.divYield,
+      expenseRatio: yahooSummary.expenseRatio,
+      avgVolume: yahooSummary.avgVolume != null ? yahooSummary.avgVolume / 1e6 : null,
+      roe: yahooSummary.roe,
+      roa: yahooSummary.roa,
+      roi: yahooSummary.roi,
+      revGrowth1Y: yahooSummary.revGrowth,
+      epsGrowth1Y: yahooSummary.epsGrowth,
+      debtEquity: yahooSummary.debtEquity,
+      currentRatio: yahooSummary.currentRatio,
+    };
+    const secFinancials = secFacts?.financials || [];
+    const secLatest = secFinancials[secFinancials.length - 1];
+    const secPrevious = secFinancials[secFinancials.length - 2];
+    if (secLatest) {
+      if (metrics.roe == null && secLatest.netIncome != null && secLatest.equity) {
+        metrics.roe = (secLatest.netIncome / secLatest.equity) * 100;
+      }
+      if (metrics.debtEquity == null && secLatest.liabilities != null && secLatest.equity) {
+        metrics.debtEquity = secLatest.liabilities / secLatest.equity;
+      }
+      if (
+        metrics.revGrowth1Y == null &&
+        secLatest.revenue != null &&
+        secPrevious?.revenue != null &&
+        secPrevious.revenue !== 0
+      ) {
+        metrics.revGrowth1Y = ((secLatest.revenue - secPrevious.revenue) / Math.abs(secPrevious.revenue)) * 100;
+      }
+      if (
+        metrics.netMargin == null &&
+        secLatest.revenue != null &&
+        secLatest.revenue !== 0 &&
+        secLatest.netIncome != null
+      ) {
+        metrics.netMargin = (secLatest.netIncome / secLatest.revenue) * 100;
+      }
+    }
     let income: Array<{
       year: string;
       revenue: number;
       netIncome: number;
       margin: number;
-    }> = [];
+    }> = secFinancials.flatMap((row) => {
+      if (row.revenue == null || row.netIncome == null) return [];
+      return [{
+        year: String(row.year),
+        revenue: row.revenue,
+        netIncome: row.netIncome,
+        margin: row.revenue ? (row.netIncome / row.revenue) * 100 : 0,
+      }];
+    });
     let recommendation: {
       strongBuy: number;
       buy: number;
@@ -283,7 +298,10 @@ export async function GET(req: NextRequest) {
               )}&token=${finnhub}`,
               { next: { revalidate: 86400 } }
             );
-            if (res.ok) profile = await res.json();
+            if (res.ok) {
+              const fallbackProfile = await res.json();
+              profile = { ...fallbackProfile, ...(profile || {}) };
+            }
           } catch {
             /* */
           }
@@ -303,22 +321,29 @@ export async function GET(req: NextRequest) {
               const data = await res.json();
               const m = data.metric || {};
               metrics = {
-                pe: m.peBasicExclExtraTTM ?? m.peNormalizedAnnual ?? null,
-                marketCap: m.marketCapitalization ?? null,
-                high52: m["52WeekHigh"] ?? null,
-                low52: m["52WeekLow"] ?? null,
-                divYield: m.dividendYieldIndicatedAnnual ?? m.currentDividendYieldTTM ?? null,
-                netMargin: m.netProfitMarginAnnual ?? m.netProfitMarginTTM ?? null,
-                grossMargin: m.grossMarginAnnual ?? m.grossMarginTTM ?? null,
-                roe: m.roeTTM ?? null,
-                debtEquity: m["totalDebt/totalEquityAnnual"] ?? null,
-                epsGrowth1Y: m.epsGrowthTTMYoy ?? null,
-                epsGrowth3Y: m.epsGrowth3Y ?? null,
-                epsGrowth5Y: m.epsGrowth5Y ?? null,
-                revGrowth1Y: m.revenueGrowthTTMYoy ?? null,
-                revGrowth3Y: m.revenueGrowth3Y ?? null,
-                revGrowth5Y: m.revenueGrowth5Y ?? null,
-                avgVolume: m["3MonthAverageTradingVolume"] ?? m["10DayAverageTradingVolume"] ?? null,
+                ...metrics,
+                pe: metrics.pe ?? m.peBasicExclExtraTTM ?? m.peNormalizedAnnual ?? null,
+                peg: metrics.peg ?? m.pegRatio ?? null,
+                pb: metrics.pb ?? m.pbAnnual ?? m.pbQuarterly ?? null,
+                ps: metrics.ps ?? m.psAnnual ?? m.psTTM ?? null,
+                marketCap: metrics.marketCap ?? m.marketCapitalization ?? null,
+                high52: metrics.high52 ?? m["52WeekHigh"] ?? null,
+                low52: metrics.low52 ?? m["52WeekLow"] ?? null,
+                divYield: metrics.divYield ?? m.dividendYieldIndicatedAnnual ?? m.currentDividendYieldTTM ?? null,
+                netMargin: metrics.netMargin ?? m.netProfitMarginAnnual ?? m.netProfitMarginTTM ?? null,
+                grossMargin: metrics.grossMargin ?? m.grossMarginAnnual ?? m.grossMarginTTM ?? null,
+                roe: metrics.roe ?? m.roeTTM ?? null,
+                roa: metrics.roa ?? m.roaTTM ?? null,
+                roi: metrics.roi ?? m.roiTTM ?? null,
+                debtEquity: metrics.debtEquity ?? m["totalDebt/totalEquityAnnual"] ?? null,
+                currentRatio: metrics.currentRatio ?? m.currentRatioAnnual ?? m.currentRatioQuarterly ?? null,
+                epsGrowth1Y: metrics.epsGrowth1Y ?? m.epsGrowthTTMYoy ?? null,
+                epsGrowth3Y: metrics.epsGrowth3Y ?? m.epsGrowth3Y ?? null,
+                epsGrowth5Y: metrics.epsGrowth5Y ?? m.epsGrowth5Y ?? null,
+                revGrowth1Y: metrics.revGrowth1Y ?? m.revenueGrowthTTMYoy ?? null,
+                revGrowth3Y: metrics.revGrowth3Y ?? m.revenueGrowth3Y ?? null,
+                revGrowth5Y: metrics.revGrowth5Y ?? m.revenueGrowth5Y ?? null,
+                avgVolume: metrics.avgVolume ?? m["3MonthAverageTradingVolume"] ?? m["10DayAverageTradingVolume"] ?? null,
               };
             }
           } catch {
@@ -492,7 +517,7 @@ export async function GET(req: NextRequest) {
             );
             if (res.ok) {
               const list = await res.json();
-              if (Array.isArray(list)) {
+              if (Array.isArray(list) && income.length === 0) {
                 income = list
                   .slice(0, 6)
                   .map(
@@ -562,32 +587,16 @@ export async function GET(req: NextRequest) {
       /* */
     }
 
-    // Yahoo stats (acciones, ETFs, FIBRAs / .MX)
-    try {
-      const yahooStats = await fetchYahooQuoteStats(sym);
-      if (yahooStats.high52 != null && metrics.high52 == null)
-        metrics.high52 = yahooStats.high52;
-      if (yahooStats.low52 != null && metrics.low52 == null)
-        metrics.low52 = yahooStats.low52;
-      if (yahooStats.pe != null && metrics.pe == null) metrics.pe = yahooStats.pe;
-      if (yahooStats.marketCap != null && metrics.marketCap == null)
-        metrics.marketCap = yahooStats.marketCap;
-      if (yahooStats.divYield != null && metrics.divYield == null)
-        metrics.divYield = yahooStats.divYield;
-      if (yahooStats.avgVolume != null && metrics.avgVolume == null)
-        metrics.avgVolume = yahooStats.avgVolume;
-      if (yahooStats.expenseRatio != null && (metrics as { expenseRatio?: number | null }).expenseRatio == null)
-        (metrics as { expenseRatio?: number | null }).expenseRatio = yahooStats.expenseRatio;
-      if (quote) {
-        if (quote.high == null && yahooStats.dayHigh != null)
-          (quote as { high?: number }).high = yahooStats.dayHigh;
-        if (quote.low == null && yahooStats.dayLow != null)
-          (quote as { low?: number }).low = yahooStats.dayLow;
-        if (quote.volume == null && yahooStats.volume != null)
-          (quote as { volume?: number }).volume = yahooStats.volume;
-      }
-    } catch {
-      /* */
+    // Completa rangos intradía/volumen desde el resumen Yahoo ya consultado.
+    metrics.dayHigh = yahooSummary.dayHigh;
+    metrics.dayLow = yahooSummary.dayLow;
+    if (quote) {
+      if (quote.high == null && yahooSummary.dayHigh != null)
+        quote.high = yahooSummary.dayHigh;
+      if (quote.low == null && yahooSummary.dayLow != null)
+        quote.low = yahooSummary.dayLow;
+      if (quote.volume == null && yahooSummary.volume != null)
+        quote.volume = yahooSummary.volume;
     }
 
     // Expense ratio ETF (FMP) si Yahoo no lo trajo
@@ -663,6 +672,14 @@ export async function GET(req: NextRequest) {
         periodChange,
         bars: history.length,
         pe: metrics.pe,
+        peg: metrics.peg,
+        pb: metrics.pb,
+        ps: metrics.ps,
+        roe: metrics.roe,
+        roa: metrics.roa,
+        roi: metrics.roi,
+        debtEquity: metrics.debtEquity,
+        currentRatio: metrics.currentRatio,
         marketCap:
           metrics.marketCap ??
           (profileSafe?.marketCapitalization != null
@@ -704,9 +721,23 @@ export async function GET(req: NextRequest) {
         netMargin: metrics.netMargin,
         grossMargin: metrics.grossMargin,
         roe: metrics.roe,
+        roa: metrics.roa,
+        roi: metrics.roi,
         debtEquity: metrics.debtEquity,
+        currentRatio: metrics.currentRatio,
         income,
       },
+      sec: secFacts
+        ? { cik: secFacts.cik, name: secFacts.name, source: secFacts.source, filings: secFacts.filings }
+        : null,
+      dataSources: {
+        quote: quote?.source || null,
+        history: historySource,
+        summary: Object.values(yahooSummary).some((value) => value != null) ? "yahoo-public" : null,
+        sec: secFacts?.source || null,
+        dividends: dividends.length ? "public-first-composite" : null,
+      },
+      usingRealData: Boolean(quote || history.length || yahooSummary.price != null || secFacts),
       recommendation,
       priceTarget,
       earnings,

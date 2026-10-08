@@ -1,12 +1,15 @@
-/** Evita símbolos basura en query params (XSS / path raro). */
+import { normalizeYahooSymbol } from "./market-data/types";
 
-const SAFE = /^[A-Za-z0-9._^=-]{1,24}$/;
+/** Normaliza tickers de entrada sin admitir rutas ni caracteres ejecutables. */
+const SAFE_INPUT = /^[A-Za-z0-9._^=\-\s]{1,32}$/;
+const SAFE_SYMBOL = /^[A-Z0-9._^=\-]{1,24}$/;
 
 export function sanitizeSymbol(raw: string | null | undefined): string | null {
   if (!raw) return null;
-  const s = raw.trim().toUpperCase().replace(/\s+/g, "");
-  if (!SAFE.test(s)) return null;
-  return s;
+  const input = raw.trim().toUpperCase();
+  if (!SAFE_INPUT.test(input)) return null;
+  const symbol = normalizeYahooSymbol(input);
+  return SAFE_SYMBOL.test(symbol) ? symbol : null;
 }
 
 export function sanitizeSymbolList(
@@ -16,8 +19,8 @@ export function sanitizeSymbolList(
   if (!raw) return [];
   const out: string[] = [];
   for (const part of raw.split(",")) {
-    const s = sanitizeSymbol(part);
-    if (s && !out.includes(s)) out.push(s);
+    const symbol = sanitizeSymbol(part);
+    if (symbol && !out.includes(symbol)) out.push(symbol);
     if (out.length >= max) break;
   }
   return out;

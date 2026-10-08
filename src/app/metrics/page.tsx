@@ -7,7 +7,7 @@ type Row = {
   symbol: string;
   name: string;
   type: "stock" | "etf";
-  region: "US" | "MX";
+  region: "US" | "MX" | "GLOBAL";
   currency: string;
   price: number | null;
   priceMxn: number | null;
@@ -154,10 +154,11 @@ export default function MetricsPage() {
 
       <main className="flex-1 max-w-lg mx-auto w-full px-4 pb-10 pt-3 space-y-4">
         <p className="text-[11px] text-muted leading-relaxed">
-          Filtro Finnhub/FMP/Alpha Vantage (US) y precios en{" "}
-          <strong className="text-foreground">MXN</strong>
-          {usdMxn != null && ` · TC ${usdMxn.toFixed(2)}`}. Universo limitado
-          (plan gratis). No es recomendación de inversión.
+          Yahoo Finance público primero; Finnhub/FMP/Alpha Vantage y DataBursatil
+          completan huecos si configuraste sus variables. Los precios en{" "}
+          <strong className="text-foreground">USD</strong> se muestran también en MXN
+          {usdMxn != null && ` · TC ${usdMxn.toFixed(2)}`}. Sin forex/cripto como activos.
+          No es recomendación de inversión.
         </p>
 
         {/* Presets */}

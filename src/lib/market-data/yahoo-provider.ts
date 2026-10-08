@@ -4,7 +4,12 @@ import type {
   SearchResult,
   IndexQuote,
 } from "./types";
-import { detectRegion, detectCurrency } from "./types";
+import {
+  detectRegion,
+  detectCurrency,
+  isExcludedInstrument,
+  normalizeYahooSymbol,
+} from "./types";
 
 /**
  * Yahoo Finance (endpoints públicos, sin API key).
@@ -20,8 +25,9 @@ export class YahooProvider implements MarketDataProvider {
     meta: Record<string, unknown>;
     indicators?: { quote?: Array<Record<string, (number | null)[]>> };
   } | null> {
+    const canonical = normalizeYahooSymbol(symbol);
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
-      symbol
+      canonical
     )}?interval=1d&range=5d`;
     try {
       const res = await fetch(url, {
@@ -43,7 +49,8 @@ export class YahooProvider implements MarketDataProvider {
   }
 
   async getQuote(symbol: string): Promise<Quote | null> {
-    const sym = symbol.trim().toUpperCase();
+    const sym = normalizeYahooSymbol(symbol);
+    if (isExcludedInstrument(sym)) return null;
     const result = await this.fetchChart(sym);
     if (!result) return null;
 
@@ -93,12 +100,11 @@ export class YahooProvider implements MarketDataProvider {
   }
 
   async getQuotes(symbols: string[]): Promise<Quote[]> {
-    const unique = [...new Set(symbols.map((s) => s.toUpperCase()))].slice(
-      0,
-      20
-    );
-    const results = await Promise.all(unique.map((s) => this.getQuote(s)));
-    return results.filter((q): q is Quote => q !== null);
+    const unique = [...new Set(symbols.map(normalizeYahooSymbol))]
+      .filter((symbol) => !isExcludedInstrument(symbol))
+      .slice(0, 40);
+    const results = await Promise.all(unique.map((symbol) => this.getQuote(symbol)));
+    return results.filter((quote): quote is Quote => quote !== null);
   }
 
   async search(query: string): Promise<SearchResult[]> {
@@ -115,25 +121,28 @@ export class YahooProvider implements MarketDataProvider {
       });
       if (!res.ok) return [];
       const data = await res.json();
-      const quotes = data?.quotes || [];
+      const quotes = Array.isArray(data?.quotes) ? data.quotes : [];
       return quotes
-        .filter((q: { symbol?: string }) => q.symbol)
+        .filter((quote: { symbol?: string; quoteType?: string }) =>
+          Boolean(quote.symbol) && !isExcludedInstrument(String(quote.symbol), quote.quoteType)
+        )
         .map(
-          (q: {
+          (quote: {
             symbol: string;
             shortname?: string;
             longname?: string;
             exchange?: string;
             quoteType?: string;
           }) => {
-            const region = detectRegion(q.symbol);
+            const symbol = normalizeYahooSymbol(quote.symbol);
+            const region = detectRegion(symbol);
             return {
-              symbol: q.symbol,
-              name: q.longname || q.shortname || q.symbol,
-              exchange: q.exchange,
-              type: q.quoteType,
+              symbol,
+              name: quote.longname || quote.shortname || symbol,
+              exchange: quote.exchange,
+              type: quote.quoteType,
               region,
-              currency: detectCurrency(q.symbol, region),
+              currency: detectCurrency(symbol, region),
             };
           }
         );

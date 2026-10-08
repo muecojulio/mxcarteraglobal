@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getMarketDataProvider, isUsingRealData } from "@/lib/market-data";
+import { getMarketDataProvider } from "@/lib/market-data";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +16,7 @@ export async function GET() {
     return NextResponse.json({
       indices,
       count: indices.length,
-      usingRealData: isUsingRealData(),
+      usingRealData: indices.length > 0 && indices.every((index) => index.source !== "mock"),
       provider: provider.name,
     });
   } catch (err) {

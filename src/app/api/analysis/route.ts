@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sanitizeSymbol } from "@/lib/sanitize";
-import { getMarketDataProvider, detectRegion } from "@/lib/market-data";
+import { getMarketDataProvider, detectRegion, isExcludedInstrument, normalizeYahooSymbol } from "@/lib/market-data";
+import { freeYahooSummary, publicSecCompanyFacts } from "@/lib/free-finance";
 
 export const dynamic = "force-dynamic";
 
@@ -161,7 +162,7 @@ function buildAnalysis(input: {
 
   // Señal orientativa (reglas simples sobre datos públicos; NO es consejo de inversión)
   let score = 0;
-  let reasons: string[] = [];
+  const reasons: string[] = [];
   if (pe != null) {
     if (pe > 0 && pe < 18) {
       score += 2;
@@ -247,16 +248,49 @@ export async function GET(req: NextRequest) {
   if (!symbol) {
     return NextResponse.json({ error: "symbol requerido" }, { status: 400 });
   }
+  if (isExcludedInstrument(symbol)) {
+    return NextResponse.json({ error: "Forex y criptomonedas están excluidos del análisis bursátil." }, { status: 400 });
+  }
 
   const provider = getMarketDataProvider();
-  const region = detectRegion(symbol);
+  const sym = normalizeYahooSymbol(symbol);
+  const region = detectRegion(sym);
   const finnhub = process.env.FINNHUB_API_KEY?.trim();
   const fmp = process.env.FMP_API_KEY?.trim();
-  const sym = symbol.toUpperCase();
 
   try {
-    const quote = await provider.getQuote(sym);
-    const metrics: Metrics = {};
+    const [quote, yahooSummary, secFacts] = await Promise.all([
+      provider.getQuote(sym),
+      freeYahooSummary(sym),
+      region === "US" ? publicSecCompanyFacts(sym) : Promise.resolve(null),
+    ]);
+    const metrics: Metrics = {
+      pe: yahooSummary.pe,
+      pb: yahooSummary.pb,
+      peg: yahooSummary.peg,
+      roe: yahooSummary.roe,
+      roa: yahooSummary.roa,
+      roi: yahooSummary.roi,
+      debtEquity: yahooSummary.debtEquity,
+      currentRatio: yahooSummary.currentRatio,
+      divYield: yahooSummary.divYield,
+      high52: yahooSummary.high52,
+      low52: yahooSummary.low52,
+      marketCap: yahooSummary.marketCap,
+    };
+    const secFinancials = secFacts?.financials || [];
+    const latest = secFinancials[secFinancials.length - 1];
+    if (latest) {
+      if (metrics.roe == null && latest.netIncome != null && latest.equity) {
+        metrics.roe = (latest.netIncome / latest.equity) * 100;
+      }
+      if (metrics.debtEquity == null && latest.liabilities != null && latest.equity) {
+        metrics.debtEquity = latest.liabilities / latest.equity;
+      }
+      if (metrics.marketCap == null && quote?.marketCap != null) {
+        metrics.marketCap = quote.marketCap;
+      }
+    }
 
     // Finnhub metrics (US)
     if (finnhub && region === "US") {
@@ -270,13 +304,13 @@ export async function GET(req: NextRequest) {
         if (res.ok) {
           const data = await res.json();
           const m = data.metric || {};
-          metrics.pe = m.peBasicExclExtraTTM ?? m.peNormalizedAnnual;
-          metrics.roe = m.roeTTM;
-          metrics.debtEquity = m["totalDebt/totalEquityAnnual"];
-          metrics.divYield = m.dividendYieldIndicatedAnnual;
-          metrics.high52 = m["52WeekHigh"];
-          metrics.low52 = m["52WeekLow"];
-          metrics.marketCap = m.marketCapitalization;
+          metrics.pe ??= m.peBasicExclExtraTTM ?? m.peNormalizedAnnual;
+          metrics.roe ??= m.roeTTM;
+          metrics.debtEquity ??= m["totalDebt/totalEquityAnnual"];
+          metrics.divYield ??= m.dividendYieldIndicatedAnnual;
+          metrics.high52 ??= m["52WeekHigh"];
+          metrics.low52 ??= m["52WeekLow"];
+          metrics.marketCap ??= m.marketCapitalization;
         }
       } catch {
         /* ignore */
@@ -305,10 +339,10 @@ export async function GET(req: NextRequest) {
           if (Array.isArray(ratios) && ratios[0]) {
             const r = ratios[0];
             if (metrics.pe == null) metrics.pe = r.priceToEarningsRatio;
-            metrics.pb = r.priceToBookRatio;
+            if (metrics.pb == null) metrics.pb = r.priceToBookRatio;
             if (metrics.debtEquity == null)
               metrics.debtEquity = r.debtToEquityRatio;
-            metrics.currentRatio = r.currentRatio;
+            if (metrics.currentRatio == null) metrics.currentRatio = r.currentRatio;
             if (metrics.divYield == null && r.dividendYield != null)
               metrics.divYield = r.dividendYield;
           }
@@ -326,7 +360,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const name = quote?.name || sym;
+    const name = quote?.name || yahooSummary.name || secFacts?.name || sym;
     const analysis = buildAnalysis({
       symbol: sym,
       name,
@@ -344,7 +378,17 @@ export async function GET(req: NextRequest) {
       quote,
       metrics,
       analysis,
-      usingRealData: Boolean(quote),
+      sources: {
+        quote: quote?.source || null,
+        fundamentals: Object.values(yahooSummary).some((value) => value != null) ? "yahoo-public" : null,
+        sec: secFacts?.source || null,
+        configuredFallbacks: [
+          ...(finnhub ? ["finnhub"] : []),
+          ...(fmp ? ["fmp"] : []),
+        ],
+      },
+      analysisMethod: "Reglas deterministas sobre datos públicos; no se usa un modelo de IA externo ni se inventan cifras.",
+      usingRealData: Boolean(quote || yahooSummary.price != null),
     });
   } catch (err) {
     console.error("Analysis error:", err);
