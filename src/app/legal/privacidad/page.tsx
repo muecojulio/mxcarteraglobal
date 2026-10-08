@@ -110,10 +110,32 @@ export default function PrivacidadPage() {
             </table>
           </div>
           <p className="text-xs">
-            Cuando activas la clave de acceso, los elementos marcados como
-            sensibles se guardan cifrados con una llave derivada de tu clave
-            (AES-GCM vía WebCrypto). La clave nunca se envía a ningún servidor:
-            solo se conserva su hash y el cifrado se realiza en tu navegador.
+            Los elementos marcados como sensibles se guardan cifrados con
+            AES-GCM (WebCrypto). La fuerza real depende de si activas la clave
+            de acceso:
+          </p>
+          <ul className="text-xs space-y-1 list-disc pl-5">
+            <li>
+              <span className="text-foreground">Con clave activada:</span> la
+              llave maestra se deriva de tu clave con PBKDF2 (120.000
+              iteraciones, SHA-256) y solo se guarda envuelta. Sin tu clave no
+              se puede leer la cartera.
+            </li>
+            <li>
+              <span className="text-foreground">Sin clave activada:</span> se usa
+              una llave de dispositivo que se guarda en el mismo{" "}
+              <code className="text-xs">localStorage</code>. Cifra el contenido,
+              pero no es una caja fuerte: alguien con acceso físico a tu
+              navegador podría reconstruirla.{" "}
+              <span className="text-foreground">
+                Activa la clave de acceso en Ajustes si guardas una cartera
+                relevante.
+              </span>
+            </li>
+          </ul>
+          <p className="text-xs">
+            Tu clave nunca se envía a ningún servidor: el cifrado, el hash y la
+            verificación ocurren íntegramente en tu navegador.
           </p>
         </section>
 
@@ -226,9 +248,16 @@ export default function PrivacidadPage() {
           <h2 className="text-foreground font-semibold">8. Seguridad</h2>
           <ul className="text-xs space-y-1 list-disc pl-5">
             <li>Todas las comunicaciones viajan por HTTPS con HSTS.</li>
-            <li>Las claves de las fuentes de datos se usan solo en el servidor; nunca se envían al navegador.</li>
+            <li>Las claves de las fuentes de datos se usan en el servidor y no se incrustan en el código del cliente.</li>
+            <li>
+              Excepción: si el administrador configura{" "}
+              <code className="text-xs">FINNHUB_API_KEY</code> y usas el flujo de
+              trades en tiempo real, esa clave se entrega a tu navegador porque
+              el WebSocket de Finnhub la exige en el cliente. Es la única clave
+              que sale del servidor; el resto no.
+            </li>
             <li>Las rutas <code className="text-xs">/api/*</code> rechazan peticiones de otros orígenes y aplican límite de peticiones por IP.</li>
-            <li>El cifrado local usa AES-GCM con llave derivada de tu clave; el servidor solo conserva hashes.</li>
+            <li>El cifrado local usa AES-GCM con llave derivada de tu clave (PBKDF2, 120.000 iteraciones). El hash de la clave se guarda en tu dispositivo; el servidor no lo recibe.</li>
             <li>Bloqueo tras intentos fallidos de clave y código de recuperación opcional.</li>
           </ul>
           <p className="text-xs">
