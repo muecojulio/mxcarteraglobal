@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { HorizontalRail } from "@/components/ui/HorizontalRail";
 import Link from "next/link";
 import { useQuotes, useIndices } from "@/lib/market-data/client";
 import { AssetSearch } from "@/components/AssetSearch";
@@ -112,7 +113,7 @@ export default function HomePage() {
               ))}
             </div>
           ) : indices.length > 0 ? (
-            <div className="grid grid-cols-2 gap-3">
+            <HorizontalRail ariaLabel="Índices principales" scrollerClassName="ui-card-carousel">
               {indices.map((idx) => (
                 <div
                   key={idx.symbol}
@@ -139,7 +140,7 @@ export default function HomePage() {
                   </p>
                 </div>
               ))}
-            </div>
+            </HorizontalRail>
           ) : (
             <p className="text-sm text-muted text-center py-4">
               No se pudieron cargar los índices

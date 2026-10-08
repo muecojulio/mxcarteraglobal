@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { ActionButton } from "@/components/ui/ActionButton";
 import { vaultStatus } from "@/lib/crypto-vault";
 import { hydrateVaultPersist } from "@/lib/persist";
 import { ensureDeviceVault } from "@/lib/crypto-vault";
@@ -17,6 +18,9 @@ export function CloudVaultPanel() {
   const [syncId, setSyncId] = useState("");
   const [last, setLast] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
+  const inFlight = useRef(false);
+  const [outcome, setOutcome] = useState<"success" | "error" | null>(null);
+  const [operation, setOperation] = useState<"push" | "pull" | null>(null);
   const [busy, setBusy] = useState(false);
   const [pullId, setPullId] = useState("");
   const [cloudPass, setCloudPass] = useState("");
@@ -37,6 +41,10 @@ export function CloudVaultPanel() {
   }, []);
 
   const onPush = async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setOperation("push");
+    setOutcome(null);
     setBusy(true);
     setMsg("");
     try {
@@ -45,15 +53,23 @@ export function CloudVaultPanel() {
       const { id } = await pushCloud(cloudPass);
       setSyncId(id);
       setLast(new Date().toISOString());
+      setOutcome("success");
       setMsg("Subido. El archivo en la nube está cifrado.");
     } catch (e) {
+      setOutcome("error");
       setMsg(e instanceof Error ? e.message : "Error al subir");
     } finally {
+      inFlight.current = false;
+      setOperation(null);
       setBusy(false);
     }
   };
 
   const onPull = async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setOperation("pull");
+    setOutcome(null);
     setBusy(true);
     setMsg("");
     try {
@@ -61,8 +77,10 @@ export function CloudVaultPanel() {
       await pullCloud(pullId || syncId, cloudPass);
       setSyncId(getSyncId() || pullId);
       setLast(new Date().toISOString());
+      setOutcome("success");
       setMsg("Bajado. Recarga la página para ver cartera y listas.");
     } catch (e) {
+      setOutcome("error");
       setMsg(
         e instanceof Error
           ? e.message +
@@ -72,6 +90,8 @@ export function CloudVaultPanel() {
           : "Error al bajar"
       );
     } finally {
+      inFlight.current = false;
+      setOperation(null);
       setBusy(false);
     }
   };
@@ -102,20 +122,23 @@ export function CloudVaultPanel() {
 
         <input
           type="password"
+          aria-label="Clave de nube"
           className="w-full min-h-[48px] rounded-xl border border-border px-3 bg-background"
           placeholder="Clave de nube (usa tu NIP)"
           value={cloudPass}
           onChange={(e) => setCloudPass(e.target.value)}
         />
 
-        <button
+        <ActionButton
           type="button"
           disabled={busy}
+          busy={operation === "push"}
+          busyLabel="Subiendo copia…"
           onClick={onPush}
           className="w-full min-h-[48px] rounded-xl bg-primary text-primary-foreground font-semibold disabled:opacity-50"
         >
-          {busy ? "Espera…" : "Subir copia cifrada"}
-        </button>
+          Subir copia cifrada
+        </ActionButton>
 
         {syncId && (
           <div>
@@ -133,19 +156,22 @@ export function CloudVaultPanel() {
 
         <input
           className="w-full min-h-[48px] rounded-xl border border-border px-3 bg-background"
+          aria-label="ID de otro dispositivo"
           placeholder="ID de otro dispositivo"
           value={pullId}
           onChange={(e) => setPullId(e.target.value)}
         />
-        <button
+        <ActionButton
           type="button"
           disabled={busy}
+          busy={operation === "pull"}
+          busyLabel="Bajando copia…"
           onClick={onPull}
           className="w-full min-h-[48px] rounded-xl border border-border font-semibold disabled:opacity-50"
         >
           Bajar copia cifrada
-        </button>
-        {msg && <p className="text-xs text-muted text-center">{msg}</p>}
+        </ActionButton>
+        <p role="status" aria-atomic="true" className="text-xs text-center">{msg && `${outcome === "error" ? "Error: " : "✓ "}${msg}`}</p>
       </div>
     </section>
   );

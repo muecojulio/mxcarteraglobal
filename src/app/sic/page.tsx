@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { AccessibleTabs } from "@/components/ui/AccessibleTabs";
 import Link from "next/link";
 import { useQuotes } from "@/lib/market-data/client";
 import { useUsdMxn, toMxn, formatMxn } from "@/lib/fx";
@@ -48,53 +49,7 @@ export default function SicPage() {
     return withQuote;
   }, [catalog, map, q, tab]);
 
-  return (
-    <div className="flex flex-col min-h-full">
-      <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-md border-b border-border safe-top">
-        <div className="flex items-center justify-between px-4 h-14 max-w-lg mx-auto">
-          <h1 className="text-lg font-bold">SIC · Mercado Global</h1>
-        </div>
-      </header>
-
-      <main className="flex-1 max-w-lg mx-auto w-full px-4 pb-10 pt-3">
-        <p className="text-xs text-muted mb-3 leading-relaxed">
-          Acciones y ETFS del <span className="text-foreground font-medium">Sistema Internacional de Cotizaciones (SIC)</span> de la BMV.
-          Se operan en México en pesos, con el mismo esquema fiscal local. El SIC tiene más de 3,500
-          valores; aquí están los más líquidos y una base amplia para buscar por ticker o nombre.
-          Precios de referencia en MXN (origen USD/otra divisa × tipo de cambio).
-        </p>
-
-        <input
-          type="search"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Buscar ticker o nombre (AAPL, VOO, Novo…)"
-          className="w-full mb-3 bg-card border border-border rounded-2xl py-2.5 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40 min-h-[48px]"
-        />
-
-        <div className="flex gap-2 overflow-x-auto no-scrollbar mb-3">
-          {(
-            [
-              { key: "stock" as const, label: "Acciones SIC" },
-              { key: "etf" as const, label: "ETFS SIC" },
-              { key: "ALL" as const, label: "Todos" },
-            ]
-          ).map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setTab(t.key)}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap ${
-                tab === t.key
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-card border border-border text-muted"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
+  const results = <>
         <p className="text-[11px] text-muted mb-2">
           {tab !== "ALL" && !q.trim()
             ? `${filtered.length} que más bajaron hoy`
@@ -152,6 +107,39 @@ export default function SicPage() {
             );
           })}
         </div>
+
+  </>;
+
+  return (
+    <div className="flex flex-col min-h-full">
+      <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-md border-b border-border safe-top">
+        <div className="flex items-center justify-between px-4 h-14 max-w-lg mx-auto">
+          <h1 className="text-lg font-bold">SIC · Mercado Global</h1>
+        </div>
+      </header>
+
+      <main className="flex-1 max-w-lg mx-auto w-full px-4 pb-10 pt-3">
+        <p className="text-xs text-muted mb-3 leading-relaxed">
+          Acciones y ETFS del <span className="text-foreground font-medium">Sistema Internacional de Cotizaciones (SIC)</span> de la BMV.
+          Se operan en México en pesos, con el mismo esquema fiscal local. El SIC tiene más de 3,500
+          valores; aquí están los más líquidos y una base amplia para buscar por ticker o nombre.
+          Precios de referencia en MXN (origen USD/otra divisa × tipo de cambio).
+        </p>
+
+        <input
+          type="search"
+          aria-label="Buscar en el catálogo SIC"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Buscar ticker o nombre (AAPL, VOO, Novo…)"
+          className="w-full mb-3 bg-card border border-border rounded-2xl py-2.5 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40 min-h-[48px]"
+        />
+
+        <AccessibleTabs label="Tipos de activos SIC" tabs={[
+          { value: "stock", label: "Acciones SIC" },
+          { value: "etf", label: "ETFS SIC" },
+          { value: "ALL", label: "Todos" },
+        ]} value={tab} onChange={setTab} panels={{ stock: results, etf: results, ALL: results }} />
 
         <p className="text-[11px] text-muted text-center mt-4 leading-relaxed">
           Catálogo de referencia ({SIC_STOCKS.length} acciones + {SIC_ETFS.length} ETFS

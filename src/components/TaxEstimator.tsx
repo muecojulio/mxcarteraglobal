@@ -82,9 +82,12 @@ export function TaxEstimator({
         <strong className="text-foreground">No es asesoría fiscal.</strong>
       </p>
 
-      <label className="flex items-center gap-2 text-sm">
+      <label className="flex items-center gap-3 text-sm min-h-[44px]">
         <input
           type="checkbox"
+          role="switch"
+          aria-checked={hasW8}
+          className="ui-switch"
           checked={hasW8}
           onChange={(e) => setHasW8(e.target.checked)}
         />

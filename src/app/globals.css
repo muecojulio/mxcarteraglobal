@@ -14,7 +14,7 @@
   --primary: #2a7a6a;
   --primary-foreground: #ffffff;
   --secondary: #ebe3d4;
-  --muted: #94a0b3;
+  --muted: #657287;
   --border: #e4d9c8;
   --success: #3d7a62;
   --danger: #b85c4a;
@@ -88,7 +88,7 @@ html.light {
   --primary: #2a7a6a;
   --primary-foreground: #ffffff;
   --secondary: #ebe3d4;
-  --muted: #94a0b3;
+  --muted: #657287;
   --border: #e4d9c8;
   --success: #3d7a62;
   --danger: #b85c4a;
@@ -253,7 +253,7 @@ body {
   transition: transform 0.15s ease, opacity 0.15s ease;
   box-shadow: var(--shadow-soft);
 }
-.ui-btn:active {
+.ui-btn:not(:disabled):active {
   transform: scale(0.97);
   opacity: 0.9;
 }
@@ -359,3 +359,59 @@ a.block,
 a.flex {
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Shared interaction layer: native scrolling, short feedback, keyboard parity. */
+:root { --ui-duration: 220ms; --ui-ease: cubic-bezier(.2,.7,.2,1); }
+button, a.btn-touch, [role="button"], input, select, textarea { touch-action: manipulation; }
+button { min-width: 44px; transition: background-color 160ms, box-shadow 160ms, transform 160ms, opacity 160ms; }
+button:not(:disabled):active, .ui-btn:not(:disabled):active { transform: scale(.98); box-shadow: none; }
+button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+:where(button, a, input, select, textarea, [tabindex]):focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+:where(input, select, textarea):not([type="checkbox"]):not([type="radio"]) { min-height: 44px; }
+:where(input, select, textarea):focus { border-color: var(--primary); }
+@media (hover: hover) and (pointer: fine) {
+  button:not(:disabled):hover { box-shadow: 0 2px 6px color-mix(in srgb, var(--foreground) 12%, transparent); }
+  a.bg-card:hover { border-color: var(--primary); }
+}
+.ui-horizontal-rail { position: relative; min-width: 0; max-width: 100%; }
+.ui-horizontal-rail__scroller { display: flex; gap: .5rem; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; scroll-snap-type: x proximity; padding: 4px; -webkit-overflow-scrolling: touch; }
+.ui-horizontal-rail__scroller::-webkit-scrollbar { display: none; }
+.ui-horizontal-rail__scroller > * { flex-shrink: 0; scroll-snap-align: center; }
+.ui-horizontal-rail__fade { position: absolute; inset-block: 0; width: 22px; pointer-events: none; z-index: 2; }
+.ui-horizontal-rail__fade--start { left: 0; background: linear-gradient(90deg, var(--background), transparent); }
+.ui-horizontal-rail__fade--end { right: 0; background: linear-gradient(-90deg, var(--background), transparent); }
+.ui-chip { white-space: nowrap; }
+.ui-chip-active { border: 2px solid var(--primary); text-decoration: underline; text-underline-offset: 4px; }
+.ui-tab-list { position: relative; gap: .25rem; margin-bottom: .75rem; }
+.ui-tab { position: relative; z-index: 1; white-space: nowrap; padding: .65rem 1rem; border-radius: var(--radius-full); font-weight: 600; }
+.ui-tab[aria-selected="true"] { color: var(--primary); text-decoration: underline; text-underline-offset: 5px; }
+.ui-tab-indicator { position: absolute; left: 0; top: 4px; bottom: 4px; background: color-mix(in srgb, var(--primary) 14%, transparent); border: 1px solid var(--primary); border-radius: var(--radius-full); pointer-events: none; opacity: 0; }
+.ui-tab-indicator.is-ready { opacity: 1; transition: transform var(--ui-duration) var(--ui-ease), width var(--ui-duration) var(--ui-ease); }
+.ui-tab-panels { position: relative; min-width: 0; }
+.ui-tab-panel { min-width: 0; }
+.ui-tab-panel.is-active { animation: ui-panel-in var(--ui-duration) var(--ui-ease); }
+.ui-tab-panel.is-exiting { position: absolute; inset: 0; pointer-events: none; animation: ui-panel-out var(--ui-duration) var(--ui-ease) forwards; }
+@keyframes ui-panel-in { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: none; } }
+@keyframes ui-panel-out { to { opacity: 0; transform: translateX(-8px); } }
+.ui-disclosure { display: grid; grid-template-rows: 0fr; visibility: hidden; transition: grid-template-rows var(--ui-duration), visibility var(--ui-duration); }
+.ui-disclosure.is-open { grid-template-rows: 1fr; visibility: visible; }
+.ui-disclosure__clip { min-height: 0; overflow: hidden; }
+.ui-card-carousel > * { flex: 0 0 82%; min-width: 0; }
+.ui-card-carousel { gap: .75rem; }
+@media (min-width: 768px) { .ui-card-carousel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.ui-combobox-options { overscroll-behavior-y: contain; }
+.ui-combobox-option[data-active="true"] { background: var(--secondary); outline: 2px solid var(--primary); outline-offset: -2px; }
+.ui-switch { appearance: none; width: 44px; height: 26px; flex-shrink: 0; border: 2px solid var(--foreground); border-radius: 99px; background: var(--secondary); position: relative; }
+.ui-switch::after { content: ''; position: absolute; width: 18px; height: 18px; top: 2px; left: 2px; border-radius: 50%; background: var(--foreground); transition: transform 160ms; }
+.ui-switch:checked { background: var(--primary); border-color: var(--primary); }
+.ui-switch:checked::after { background: var(--primary-foreground); transform: translateX(18px); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  button:not(:disabled):active, .ui-btn:not(:disabled):active { transform: none; }
+}
+.ui-swipe { min-width: 0; }
+.ui-swipe__viewport { position: relative; overflow: hidden; }
+.ui-swipe__content { position: relative; background: var(--card); touch-action: pan-y pinch-zoom; transition: transform var(--ui-duration) var(--ui-ease); }
+.ui-swipe__actions { position: absolute; right: 0; top: 0; bottom: 0; width: 104px; display: flex; align-items: center; justify-content: center; background: var(--secondary); }
+.ui-swipe__toggle { display: block; margin-left: auto; padding: 0 1rem; font-size: .75rem; text-decoration: underline; text-underline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .ui-swipe__content { transition: none; } }

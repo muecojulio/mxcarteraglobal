@@ -87,7 +87,7 @@ export function HorizontalRail({
   };
 
   const onClickCapture = (event: ReactMouseEvent<HTMLDivElement>) => {
-    if (!draggedRef.current) return;
+    if (!draggedRef.current || event.detail === 0) return;
     event.preventDefault();
     event.stopPropagation();
     draggedRef.current = false;
@@ -99,6 +99,7 @@ export function HorizontalRail({
         ref={scrollerRef}
         className={`ui-horizontal-rail__scroller ${scrollerClassName}`}
         role={role}
+        tabIndex={role !== "tablist" && (edges.start || edges.end) ? 0 : undefined}
         aria-label={ariaLabel}
         aria-orientation={orientation}
         onPointerDown={onPointerDown}
