@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { SwipeActions } from "@/components/ui/SwipeActions";
+import { ScrollableChips } from "@/components/ui/ScrollableChips";
 import Link from "next/link";
 import { useQuotes } from "@/lib/market-data/client";
 import { loadWatchlist, saveWatchlist } from "@/lib/persist";
@@ -170,6 +172,7 @@ export default function WatchlistPage() {
             </span>
             <input
               type="search"
+              aria-label="Filtrar lista de seguimiento"
               placeholder="Buscar símbolo o nombre..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -179,24 +182,10 @@ export default function WatchlistPage() {
         </div>
 
         {/* Filtros */}
-        <div className="px-4 pb-3 flex items-center gap-2 overflow-x-auto no-scrollbar">
-          {[
-            { key: "ALL", label: "Todos" },
-            { key: "MX", label: "🇲🇽 México" },
-            { key: "US", label: "🇺🇸 EE.UU." },
-          ].map((f) => (
-            <button
-              key={f.key}
-              onClick={() => setFilter(f.key as "ALL" | "MX" | "US")}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-                filter === f.key
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-card border border-border text-muted"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
+        <div className="px-4 pb-3 flex flex-wrap items-center gap-2">
+          <ScrollableChips label="Filtrar seguimiento por mercado" value={filter} onChange={setFilter} options={[
+            { value: "ALL", label: "Todos" }, { value: "MX", label: "🇲🇽 México" }, { value: "US", label: "🇺🇸 EE.UU." },
+          ]} />
           <button
             onClick={() =>
               setSortBy((s) => (s === "symbol" ? "change" : "symbol"))
@@ -242,8 +231,16 @@ export default function WatchlistPage() {
           ) : (
             <div className="bg-card rounded-xl border border-border overflow-hidden divide-y divide-border">
               {filtered.map((stock) => (
+                <SwipeActions key={stock.symbol} label={stock.symbol} actions={
+                  <button
+                    onClick={() => removeSymbol(stock.symbol)}
+                    className="w-8 h-8 flex items-center justify-center text-muted hover:text-danger transition-colors flex-shrink-0"
+                    aria-label={`Eliminar ${stock.symbol}`}
+                  >
+                    ✕
+                  </button>
+                }>
                 <div
-                  key={stock.symbol}
                   className="flex items-center gap-3 px-4 py-3.5 active:bg-secondary/40 transition-colors"
                 >
                   <div
@@ -284,14 +281,9 @@ export default function WatchlistPage() {
                     </p>
                   </div>
 
-                  <button
-                    onClick={() => removeSymbol(stock.symbol)}
-                    className="w-8 h-8 flex items-center justify-center text-muted hover:text-danger transition-colors flex-shrink-0"
-                    aria-label={`Eliminar ${stock.symbol}`}
-                  >
-                    ✕
-                  </button>
+
                 </div>
+                </SwipeActions>
               ))}
             </div>
           )}
@@ -318,6 +310,7 @@ export default function WatchlistPage() {
             <div className="p-4 space-y-3">
               <input
                 type="text"
+                aria-label="Símbolo a añadir"
                 placeholder="Símbolo (ej. AAPL, AMXL.MX, GOOGL)"
                 value={addQuery}
                 onChange={(e) => setAddQuery(e.target.value)}

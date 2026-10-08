@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { CollapsiblePanel } from "@/components/ui/CollapsiblePanel";
+import { HorizontalRail } from "@/components/ui/HorizontalRail";
 import Link from "next/link";
 
 type Row = {
@@ -135,6 +137,9 @@ export default function MetricsPage() {
           <div className="flex items-center gap-2">
             <button
               type="button"
+              id="metrics-filter-toggle"
+              aria-expanded={showFilters}
+              aria-controls="metrics-filters"
               onClick={() => setShowFilters((s) => !s)}
               className="text-xs font-medium px-2.5 py-1.5 rounded-lg border border-border"
             >
@@ -144,6 +149,7 @@ export default function MetricsPage() {
               type="button"
               onClick={() => run()}
               disabled={loading}
+              aria-busy={loading}
               className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-primary text-primary-foreground disabled:opacity-50"
             >
               {loading ? "…" : "Aplicar"}
@@ -162,7 +168,7 @@ export default function MetricsPage() {
         </p>
 
         {/* Presets */}
-        <div className="flex gap-2 overflow-x-auto no-scrollbar">
+        <HorizontalRail ariaLabel="Criterios predefinidos">
           {[
             { id: "all", label: "Ver todos" },
             { id: "value", label: "Valor" },
@@ -177,7 +183,7 @@ export default function MetricsPage() {
               {p.label}
             </button>
           ))}
-        </div>
+        </HorizontalRail>
 
         {/* Tipo */}
         <div className="flex gap-2">
@@ -191,6 +197,7 @@ export default function MetricsPage() {
             <button
               key={k}
               type="button"
+              aria-pressed={filters.type === k}
               onClick={() => {
                 set("type", k);
                 setFilters((prev) => {
@@ -209,7 +216,7 @@ export default function MetricsPage() {
           ))}
         </div>
 
-        {showFilters && (
+        <CollapsiblePanel id="metrics-filters" labelledBy="metrics-filter-toggle" open={showFilters}>
           <section className="bg-card rounded-xl border border-border p-4 space-y-3">
             <p className="text-xs font-semibold text-muted uppercase tracking-wide">
               Criterios (vacío = no filtrar)
@@ -229,10 +236,11 @@ export default function MetricsPage() {
                 ] as const
               ).map(([key, label]) => (
                 <div key={key}>
-                  <label className="text-[10px] text-muted block mb-1">
+                  <label htmlFor={`metric-${key}`} className="text-[10px] text-muted block mb-1">
                     {label}
                   </label>
                   <input
+                    id={`metric-${key}`}
                     type="number"
                     step="0.1"
                     value={filters[key]}
@@ -262,7 +270,7 @@ export default function MetricsPage() {
               Restaurar valores sugeridos
             </button>
           </section>
-        )}
+        </CollapsiblePanel>
 
         {error && (
           <p className="text-sm text-danger text-center">{error}</p>

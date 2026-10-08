@@ -1,3 +1,4 @@
+import { normalizeSearchText } from "./search-text";
 /**
  * Universo de la app: BMV, BIVA y SIC (Mercado Global).
  * Locales: acciones, FIBRAs y ETFs/TRACs mexicanos con operatividad razonable.
@@ -229,7 +230,7 @@ export function searchMxUniverse(
   region: string;
   exchange: string;
 }> {
-  const rawNeedle = q.trim().toUpperCase();
+  const rawNeedle = normalizeSearchText(q);
   if (!rawNeedle) return [];
   const canonicalNeedle = normalizeYahooSymbol(rawNeedle);
   const needles = [...new Set([rawNeedle, canonicalNeedle])];
@@ -238,7 +239,7 @@ export function searchMxUniverse(
     needles.some(
       (needle) =>
         item.symbol.toUpperCase().includes(needle) ||
-        item.name.toUpperCase().includes(needle) ||
+        normalizeSearchText(item.name).includes(needle) ||
         item.symbol.replace(/\.MX$/, "").includes(needle)
     )
   );

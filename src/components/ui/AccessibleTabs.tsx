@@ -2,7 +2,7 @@
 
 import {
   type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
+  type TouchEvent as ReactTouchEvent,
   type ReactNode,
   useEffect,
   useId,
@@ -13,7 +13,7 @@ import { HorizontalRail } from "@/components/ui/HorizontalRail";
 
 type TabDefinition<Value extends string> = { value: Value; label: string };
 type Indicator = { left: number; width: number };
-type GestureStart = { id: number; x: number; y: number; time: number };
+type GestureStart = { id: number; x: number; y: number; time: number; axis?: "x" };
 
 const SWIPE_EXCLUSIONS = [
   "button",
@@ -29,6 +29,11 @@ const SWIPE_EXCLUSIONS = [
   ".ui-horizontal-rail",
   ".touch-none",
   "[role='map']",
+  "[role='combobox']",
+  "[role='switch']",
+  "[role='slider']",
+  "[role='listbox']",
+  "[contenteditable]",
 ].join(",");
 
 function prefersReducedMotion() {
@@ -55,7 +60,7 @@ export function AccessibleTabs<Value extends string>({
   const gesture = useRef<GestureStart | null>(null);
   const exitTimer = useRef<number | null>(null);
   const [indicator, setIndicator] = useState<Indicator | null>(null);
-  const [exitingValue, setExitingValue] = useState<Value | null>(null);
+  const [exit, setExit] = useState<{ value: Value; content: ReactNode } | null>(null);
 
   useEffect(() => {
     const selectedTab = tabRefs.current.get(value);
@@ -90,11 +95,11 @@ export function AccessibleTabs<Value extends string>({
 
   const selectTab = (nextValue: Value) => {
     if (nextValue === value) return;
-    setExitingValue(value);
+    setExit({ value, content: panels[value] });
     if (exitTimer.current !== null) window.clearTimeout(exitTimer.current);
     const reducedMotion = prefersReducedMotion();
     exitTimer.current = window.setTimeout(() => {
-      setExitingValue(null);
+      setExit(null);
       exitTimer.current = null;
     }, reducedMotion ? 0 : 220);
     onChange(nextValue);
@@ -104,7 +109,7 @@ export function AccessibleTabs<Value extends string>({
     const next = tabs[index];
     if (!next) return;
     selectTab(next.value);
-    tabRefs.current.get(next.value)?.focus();
+    tabRefs.current.get(next.value)?.focus({ preventScroll: true });
   };
 
   const onTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
@@ -118,21 +123,24 @@ export function AccessibleTabs<Value extends string>({
     focusAndSelect(nextIndex);
   };
 
-  const onPanelPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.pointerType !== "touch" || !event.isPrimary) return;
+  const onPanelPointerDown = (event: ReactTouchEvent<HTMLDivElement>) => {
+    gesture.current = null;
+    if (event.touches.length !== 1) return;
+    const touch = event.changedTouches[0];
     const target = event.target;
     if (target instanceof Element && target.closest(SWIPE_EXCLUSIONS)) return;
-    gesture.current = { id: event.pointerId, x: event.clientX, y: event.clientY, time: event.timeStamp };
+    gesture.current = { id: touch.identifier, x: touch.clientX, y: touch.clientY, time: event.timeStamp };
   };
 
-  const onPanelPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+  const onPanelPointerUp = (event: ReactTouchEvent<HTMLDivElement>) => {
     const start = gesture.current;
-    if (!start || start.id !== event.pointerId) return;
+    const touch = event.changedTouches[0];
+    if (!start || start.id !== touch.identifier) return;
     gesture.current = null;
-    if (event.pointerType !== "touch" || tabs.length < 2) return;
+    if (tabs.length < 2) return;
 
-    const dx = event.clientX - start.x;
-    const dy = event.clientY - start.y;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
     const elapsed = Math.max(1, event.timeStamp - start.time);
     const distance = Math.abs(dx);
     const clearlyHorizontal = distance > Math.abs(dy) * 1.2;
@@ -177,7 +185,7 @@ export function AccessibleTabs<Value extends string>({
       <div className="ui-tab-panels">
         {tabs.map((tab) => {
           const active = value === tab.value;
-          const exiting = exitingValue === tab.value && !active;
+          const exiting = exit?.value === tab.value && !active;
           const visible = active || exiting;
           return (
             <div
@@ -190,11 +198,22 @@ export function AccessibleTabs<Value extends string>({
               inert={!active}
               tabIndex={active ? 0 : -1}
               className={`ui-tab-panel${active ? " is-active" : exiting ? " is-exiting" : ""}`}
-              onPointerDown={active ? onPanelPointerDown : undefined}
-              onPointerUp={active ? onPanelPointerUp : undefined}
-              onPointerCancel={active ? () => { gesture.current = null; } : undefined}
+              onTouchStart={active ? onPanelPointerDown : undefined}
+              onTouchMove={active ? (event) => {
+                const start = gesture.current;
+                if (!start || start.axis) return;
+                const touch = event.touches[0];
+                if (event.touches.length !== 1 || !touch) { gesture.current = null; return; }
+                const dx = Math.abs(touch.clientX - start.x);
+                const dy = Math.abs(touch.clientY - start.y);
+                if (Math.max(dx, dy) < 10) return;
+                if (dx > dy * 1.2) start.axis = "x";
+                else gesture.current = null;
+              } : undefined}
+              onTouchEnd={active ? onPanelPointerUp : undefined}
+              onTouchCancel={active ? () => { gesture.current = null; } : undefined}
             >
-              {visible ? panels[tab.value] : null}
+              {active ? panels[tab.value] : exiting ? exit?.content : null}
             </div>
           );
         })}

@@ -1,3 +1,4 @@
+import { normalizeSearchText } from "./search-text";
 /**
  * Catálogo del Sistema Internacional de Cotizaciones (SIC / Mercado Global BMV).
  * Tickers de origen (Yahoo/US) — en casas de bolsa MX se operan en pesos.
@@ -814,7 +815,7 @@ export const SIC_UCITS: SicItem[] = [
 export const SIC_ALL: SicItem[] = [...SIC_STOCKS, ...SIC_ETFS, ...SIC_UCITS];
 
 export function searchSic(q: string, kind?: SicKind | "ALL" | "ucits"): SicItem[] {
-  const rawNeedle = q.trim().toUpperCase();
+  const rawNeedle = normalizeSearchText(q);
   const canonicalNeedle = normalizeYahooSymbol(rawNeedle);
   const needles = [...new Set([rawNeedle, canonicalNeedle])];
   const pool =
@@ -830,7 +831,7 @@ export function searchSic(q: string, kind?: SicKind | "ALL" | "ucits"): SicItem[
     needles.some(
       (needle) =>
         item.symbol.toUpperCase().includes(needle) ||
-        item.name.toUpperCase().includes(needle)
+        normalizeSearchText(item.name).includes(needle)
     )
   );
 }

@@ -31,7 +31,8 @@ export function ScrollableChips<Value extends string>({
     const selected = selectedRef.current;
     if (!selected) return;
     const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-    selected.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "nearest", inline: "center" });
+    const rail = selected.parentElement;
+    rail?.scrollTo({ left: selected.offsetLeft - (rail.clientWidth - selected.offsetWidth) / 2, behavior: reduceMotion ? "auto" : "smooth" });
   }, [value]);
 
   return (
