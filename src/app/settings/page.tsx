@@ -15,13 +15,11 @@ import {
   setPin,
   disableLock,
   registerBiometric,
-  setBioPreferred,
   isBioPreferred,
   canUseWebAuthn,
   lockNow,
   getRecoveryContacts,
 } from "@/lib/app-lock";
-import { persistSummary } from "@/lib/persist";
 import {
   getStoredTheme,
   applyTheme,

@@ -15,13 +15,6 @@ type Row = {
   source?: string;
 };
 
-function formatPrice(n: number) {
-  return n.toLocaleString("es-MX", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
 function formatPercent(n: number) {
   const sign = n >= 0 ? "+" : "";
   return `${sign}${n.toFixed(2)}%`;
@@ -35,7 +28,6 @@ function formatVol(n?: number) {
 }
 
 export default function ScreenerPage() {
-  const [preset] = useState<"losers">("losers");
   const { fx } = useUsdMxn(120_000);
   const usdMxn = fx?.usdMxn ?? null;
   const [region, setRegion] = useState<"ALL" | "US" | "MX">("ALL");

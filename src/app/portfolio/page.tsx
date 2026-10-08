@@ -22,8 +22,6 @@ import {
 const EMPTY_POSITIONS: Position[] = [];
 const EMPTY_POINTS: Array<{ t: number; value: number }> = [];
 
-const initialPositions: Position[] = [];
-
 function formatMoney(value: number, currency: string) {
   return new Intl.NumberFormat("es-MX", {
     style: "currency",
@@ -105,7 +103,7 @@ export default function PortfolioPage() {
     return Array.from(set);
   }, [positions]);
 
-  const { data, loading, wsStatus, error, refresh } = useQuotes(symbols, 45_000);
+  const { data, loading, wsStatus, refresh } = useQuotes(symbols, 45_000);
   const quotesMap = useMemo(() => {
     const map = new Map<string, Quote>();
     (data?.quotes ?? []).forEach((q) => map.set(q.symbol.toUpperCase(), q));

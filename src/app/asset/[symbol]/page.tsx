@@ -438,7 +438,13 @@ export default function AssetPage() {
         return res.json();
       })
       .then((j) => {
-        if (!cancelled) setData(j);
+        if (!cancelled) {
+          setData(j);
+          // Alimenta "Vistos recientemente" del inicio. `pushRecentSymbol`
+          // estaba importado pero nunca se llamaba, así que esa lista solo se
+          // llenaba al restaurar un respaldo.
+          pushRecentSymbol(raw);
+        }
       })
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : "Error");

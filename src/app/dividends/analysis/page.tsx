@@ -413,22 +413,17 @@ export default function DividendAnalysisPage() {
 
   const goalPct = goal > 0 ? Math.min(100, (annualTotal / goal) * 100) : 0;
 
-  // Proyección de ingreso por dividendos: reinversión simple
-  // cada año: ingreso crece con divGrowth; capital con stockGrowth + contribution
-  // aproximación: annualIncome * (1+divGrowth)^years * (ajustado por crecimiento de posición)
+  // Proyección de ingreso por dividendos: reinversión simple.
+  // (El bucle iterativo anterior quedó muerto: calculaba `income` y `value` y
+  // luego devolvía esta misma fórmula, así que se retiró junto con sus
+  // dependencias `totalMarket` y `contribution`.)
   const futureIncome = useMemo(() => {
-    let income = annualTotal;
-    let value = totalMarket;
-    for (let y = 0; y < years; y++) {
-      value = value * (1 + stockGrowth) + contribution;
-      // yield se mantiene aprox; ingreso escala con valor y crecimiento de div
-      const yld = totalMarket > 0 ? annualTotal / totalMarket : 0;
-      income = value * yld * Math.pow(1 + divGrowth, y + 1);
-    }
-    // más simple y estable:
-    return annualTotal * Math.pow(1 + divGrowth, years) *
-      Math.pow(1 + stockGrowth * 0.3, years); // factor suave por reinversión
-  }, [annualTotal, years, divGrowth, stockGrowth, totalMarket, contribution]);
+    return (
+      annualTotal *
+      Math.pow(1 + divGrowth, years) *
+      Math.pow(1 + stockGrowth * 0.3, years) // factor suave por reinversión
+    );
+  }, [annualTotal, years, divGrowth, stockGrowth]);
 
   // chart points
   const chartPts = useMemo(() => {

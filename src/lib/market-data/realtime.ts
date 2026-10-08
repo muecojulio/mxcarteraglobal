@@ -66,9 +66,8 @@ export function useRealtimeTicks(symbols: string[]) {
           setError("WebSocket no configurado (sin FINNHUB_API_KEY)");
           return;
         }
-        const { token, provider } = (await res.json()) as {
+        const { token } = (await res.json()) as {
           token?: string;
-          provider?: string;
         };
         if (!token || cancelled) {
           setStatus("off");

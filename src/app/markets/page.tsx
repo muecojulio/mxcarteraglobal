@@ -46,6 +46,26 @@ function formatPercent(n: number) {
   return `${sign}${n.toFixed(2)}%`;
 }
 
+/**
+ * Zona de cada índice. Constante de módulo: antes se declaraba dentro del
+ * componente, así que el `useMemo` de `filteredIndices` la leía sin poder
+ * declararla como dependencia (y se recreaba en cada render).
+ */
+const INDEX_ZONE: Record<string, "US" | "MX" | "EU" | "ASIA"> = {
+  "^GSPC": "US",
+  "^DJI": "US",
+  "^IXIC": "US",
+  "^RUT": "US",
+  "^MXX": "MX",
+  "^FTSE": "EU",
+  "^GDAXI": "EU",
+  "^FCHI": "EU",
+  "^STOXX50E": "EU",
+  "^N225": "ASIA",
+  "^HSI": "ASIA",
+  "000001.SS": "ASIA",
+};
+
 function MarketsInner() {
   const searchParams = useSearchParams();
   const tab = (searchParams.get("tab") || "markets").toLowerCase();
@@ -123,21 +143,6 @@ function MarketsInner() {
     formatMxn(
       toMxn(q.price, q.currency || (q.region === "MX" ? "MXN" : "USD"), usdMxn)
     );
-
-  const INDEX_ZONE: Record<string, "US" | "MX" | "EU" | "ASIA"> = {
-    "^GSPC": "US",
-    "^DJI": "US",
-    "^IXIC": "US",
-    "^RUT": "US",
-    "^MXX": "MX",
-    "^FTSE": "EU",
-    "^GDAXI": "EU",
-    "^FCHI": "EU",
-    "^STOXX50E": "EU",
-    "^N225": "ASIA",
-    "^HSI": "ASIA",
-    "000001.SS": "ASIA",
-  };
 
   const filteredIndices = useMemo(() => {
     // En pestaña "Índices" se muestran todos; en Mercados, solo la región elegida

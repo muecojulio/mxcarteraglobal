@@ -20,15 +20,6 @@ const FEATURED = [
   { symbol: "BIMBOA.MX", name: "Grupo Bimbo", region: "MX" as const },
 ];
 
-function formatMoney(value: number, currency: string) {
-  return new Intl.NumberFormat("es-MX", {
-    style: "currency",
-    currency: currency === "MXN" ? "MXN" : "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 4,
-  }).format(value);
-}
-
 function moneyMxn(
   value: number,
   fromCurrency: string | undefined,

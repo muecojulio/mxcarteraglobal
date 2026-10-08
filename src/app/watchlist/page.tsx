@@ -43,7 +43,9 @@ export default function WatchlistPage() {
   const { fx } = useUsdMxn(120_000);
   const usdMxn = fx?.usdMxn ?? null;
 
-  const quotes: Quote[] = data?.quotes ?? [];
+  // Memoizado: `data?.quotes ?? []` crea un array nuevo en cada render cuando
+  // aún no hay datos, y eso invalidaba el `useMemo` de `filtered` siempre.
+  const quotes = useMemo<Quote[]>(() => data?.quotes ?? [], [data]);
   const usingReal = data?.usingRealData ?? false;
 
   const filtered = useMemo(() => {
