@@ -5,7 +5,9 @@ export default function AvisoPage() {
     <div className="flex flex-col min-h-full">
       <header className="sticky top-0 z-40 bg-background/95 border-b border-border safe-top">
         <div className="flex items-center gap-3 px-4 h-14 max-w-lg mx-auto">
-          <Link href="/legal" className="ui-text-action text-muted text-sm" aria-label="Volver a avisos legales">‹</Link>
+          <Link href="/legal" className="text-muted text-sm">
+            ‹
+          </Link>
           <h1 className="text-lg font-bold">No somos asesor</h1>
         </div>
       </header>
@@ -21,18 +23,28 @@ export default function AvisoPage() {
           </ul>
         </div>
         <p className="text-foreground font-medium">
-          MX Cartera Global es una herramienta de seguimiento de precios, dividendos y métricas (BMV, BIVA, SIC y referencias globales).
+          MX Cartera Global es una herramienta de seguimiento de precios,
+          dividendos y métricas (BMV, BIVA, SIC y referencias globales).
         </p>
         <p>
-          Las secciones “Contexto de precio”, “Análisis”, “Filtro”, “Métricas” y rebalanceo muestran números y rangos (por ejemplo el de 52 semanas). Eso no constituye recomendación personalizada ni oferta de valores.
+          Las secciones “Contexto de precio”, “Análisis”, “Filtro”, “Métricas” y
+          rebalanceo muestran números y rangos (por ejemplo el de 52 semanas).
+          Eso no constituye recomendación personalizada ni oferta de valores.
         </p>
         <p>
-          Los impuestos (ISR, W-8BEN, resultado fiscal y reembolso de capital en FIBRAs) son estimaciones educativas. El desglose oficial de cada distribución lo publica el fiduciario; confirma con tu contador y tu casa de bolsa.
+          Los impuestos (ISR, W-8BEN, resultado fiscal y reembolso de capital en
+          FIBRAs) son estimaciones educativas. El desglose oficial de cada
+          distribución lo publica el fiduciario; confirma con tu contador y tu
+          casa de bolsa.
         </p>
         <p>
-          Precios y eventos pueden ir retrasados o incompletos según las APIs gratuitas. Rentabilidades pasadas no garantizan resultados futuros.
+          Precios y eventos pueden ir retrasados o incompletos según las APIs
+          gratuitas. Rentabilidades pasadas no garantizan resultados futuros.
         </p>
-        <p className="text-xs pt-2">Documento orientativo · No sustituye dictamen legal o fiscal · Agosto 2026</p>
+        <p className="text-xs pt-2">
+          Documento orientativo · No sustituye dictamen legal o fiscal · Agosto
+          2026
+        </p>
       </main>
     </div>
   );

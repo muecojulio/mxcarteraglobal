@@ -1,38 +1,44 @@
-==========================================
-  COMO VER MarketPulse EN iPad / iPhone / celular
+══════════════════════════════════════════
+  CÓMO VER MarketPulse EN iPad / iPhone / celular
   (sin saber programar)
-==========================================
+══════════════════════════════════════════
 
 La app necesita estar en INTERNET (con candado https)
 para instalarla bien en Apple y Android.
 
 Usaremos Vercel (gratis).
 
-------------------------------------------
+──────────────────────────────────────────
 PASO 1 — Cuenta gratis
-------------------------------------------
+──────────────────────────────────────────
 1. En la computadora (mejor que en el iPad), abre:
    https://vercel.com
 2. Pulsa "Sign Up" (Registrarse).
-3. Entra con Google o con GitHub.
+3. Entra con Google o con GitHub (el que te sea más fácil).
 
-------------------------------------------
+──────────────────────────────────────────
 PASO 2 — Subir el proyecto
-------------------------------------------
+──────────────────────────────────────────
+Opción más simple si tienes la carpeta "marketpulse" en la PC:
+
 A) Si usas GitHub:
-   - Crea un repositorio nuevo vacio.
-   - Sube la carpeta marketpulse.
+   - Crea un repositorio nuevo vacío.
+   - Sube la carpeta marketpulse (puedes pedir ayuda a alguien
+     de confianza solo para "subir archivos a GitHub").
    - En Vercel: "Add New Project" → importa ese repositorio.
-   - Root Directory: marketpulse
 
 B) Si Vercel te deja arrastrar carpeta / CLI:
    - Sigue el asistente "Import Project".
 
-------------------------------------------
+Si NO tienes la carpeta en tu PC: avísame en el chat
+"no tengo la carpeta en la computadora" y te indico
+otra forma.
+
+──────────────────────────────────────────
 PASO 3 — Variables secretas (API keys)
-------------------------------------------
+──────────────────────────────────────────
 En Vercel, proyecto → Settings → Environment Variables.
-Agrega una por una:
+Agrega una por una (nombre y valor):
 
 FINNHUB_API_KEY
 DATABURSATIL_TOKEN
@@ -42,42 +48,59 @@ FINAGE_API_KEY
 ALPHA_VANTAGE_API_KEY
 TWELVEDATA_API_KEY
 
+(Los valores son los que ya usamos en el proyecto.
+Si no los recuerdas, dímelo y te ayudo a listar solo los nombres;
+los valores los pegas tú desde tu nota segura.)
+
 Marca Environment: Production (y Preview si quieres).
 
-------------------------------------------
+──────────────────────────────────────────
 PASO 4 — Publicar
-------------------------------------------
+──────────────────────────────────────────
 Pulsa Deploy. Espera 1–3 minutos.
-Al terminar veras un enlace tipo:
+Al terminar verás un enlace tipo:
 
    https://marketpulse-xxxx.vercel.app
 
-------------------------------------------
-PASO 5 — iPhone / iPad
-------------------------------------------
-1. Abre Safari.
-2. Escribe el enlace https://...vercel.app
-3. Boton Compartir (cuadrado con flecha).
-4. "Anadir a pantalla de inicio".
-5. Pon el nombre MX Cartera Global → Anadir.
+¡Ese es el enlace de tu app!
 
-------------------------------------------
+──────────────────────────────────────────
+PASO 5 — iPhone / iPad
+──────────────────────────────────────────
+1. Abre Safari (no Chrome si puedes evitarlo en iPhone).
+2. Escribe el enlace https://...vercel.app
+3. Botón Compartir (cuadrado con flecha).
+4. "Añadir a pantalla de inicio".
+5. Pon el nombre MarketPulse → Añadir.
+
+──────────────────────────────────────────
 PASO 6 — Celular Android
-------------------------------------------
+──────────────────────────────────────────
 1. Abre Chrome.
 2. Entra al mismo enlace.
-3. Menu ⋮ → "Instalar aplicacion" o "Anadir a pantalla de inicio".
+3. Menú ⋮ → "Instalar aplicación" o "Añadir a pantalla de inicio".
 
-------------------------------------------
-PASO 7 — Codigo QR
-------------------------------------------
-1. Ve a https://TU-ENLACE/install
-2. Ahi veras el codigo QR de TU app.
-3. Cualquier otro dispositivo puede escanearlo.
+──────────────────────────────────────────
+PASO 7 — Código QR
+──────────────────────────────────────────
+1. En el celular/iPad ya con el enlace abierto, ve a:
 
-------------------------------------------
-DESPUES — Seguir mejorando la app
-------------------------------------------
-Cada vez que cambie el repo hay que volver a publicar (Deploy)
-para que el iPad vea lo nuevo. Si Vercel no esta enlazado,
-los commits a GitHub no disparan deploy.
+   https://TU-ENLACE/install
+
+   Ejemplo: https://marketpulse-xxxx.vercel.app/install
+
+2. Ahí verás el código QR de TU app.
+3. Cualquier otro dispositivo puede escanearlo para abrirla.
+
+También puedes generar un QR en cualquier web de
+"crear código QR" pegando tu enlace https://...vercel.app
+
+──────────────────────────────────────────
+DESPUÉS — Seguir mejorando la app
+──────────────────────────────────────────
+Cada vez que cambiemos cosas en el chat, habrá que
+volver a publicar (Deploy) para que el iPad vea lo nuevo.
+El proyecto se sigue editando; publicar solo actualiza
+la copia de internet.
+
+══════════════════════════════════════════

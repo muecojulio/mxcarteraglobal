@@ -1,32 +1,78 @@
 import { NextResponse } from "next/server";
-import { publicFredCsv } from "@/lib/free-finance";
 
 export const dynamic = "force-dynamic";
 
-function lastPct(rows: Array<{ value: number | null }> | undefined) {
-  if (!rows?.length) return null;
-  for (let i = rows.length - 1; i >= 0; i--) {
-    const n = rows[i]?.value;
-    if (n != null && Number.isFinite(n)) return n;
-  }
-  return null;
-}
-
+/**
+ * GET /api/risk-free
+ * Tasa libre de riesgo aproximada:
+ * - US: yield ^IRX (13-week T-bill) vía Yahoo
+ * - MX: proxy CETES 28d (si falla → estimado)
+ */
 export async function GET() {
+  let us: number | null = null;
+  let mx: number | null = null;
+  let sourceUs = "";
+  let sourceMx = "";
+
   try {
-    const [mx, us] = await Promise.all([
-      publicFredCsv("INTGSTMXM193N"),
-      publicFredCsv("DGS3MO"),
-    ]);
-    const mxAnnualPct = lastPct(mx?.rows ?? undefined);
-    const us3mPct = lastPct(us?.rows ?? undefined);
-    return NextResponse.json({
-      mxAnnualPct,
-      us3mPct,
-      source: mxAnnualPct != null ? "FRED INTGSTMXM193N" : us3mPct != null ? "FRED DGS3MO" : "none",
-      note: "Aprox. educativa. No es la tasa objetivo de Banxico.",
-    });
+    const res = await fetch(
+      "https://query1.finance.yahoo.com/v8/finance/chart/%5EIRX?interval=1d&range=5d",
+      {
+        headers: { "User-Agent": "Mozilla/5.0" },
+        next: { revalidate: 3600 },
+      }
+    );
+    if (res.ok) {
+      const d = await res.json();
+      const price = d?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      if (price != null) {
+        // ^IRX se cotiza en % (ej. 4.25)
+        us = Number(price);
+        sourceUs = "yahoo:^IRX";
+      }
+    }
   } catch {
-    return NextResponse.json({ mxAnnualPct: null, source: "error" });
+    /* */
   }
+
+  // México: intentar Banxico vía serie vía Yahoo no siempre existe.
+  // Fallback: US + prima país ~3–4 pp o valor de referencia.
+  try {
+    // Algunos usan CETETRC=MF como proxy; si no, estimación
+    const res = await fetch(
+      "https://query1.finance.yahoo.com/v8/finance/chart/CETETRC%3DMF?interval=1d&range=5d",
+      {
+        headers: { "User-Agent": "Mozilla/5.0" },
+        next: { revalidate: 3600 },
+      }
+    );
+    if (res.ok) {
+      const d = await res.json();
+      const price = d?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      if (price != null && Number(price) > 0 && Number(price) < 30) {
+        mx = Number(price);
+        sourceMx = "yahoo:CETETRC";
+      }
+    }
+  } catch {
+    /* */
+  }
+
+  if (mx == null) {
+    // Prima aproximada sobre T-bill US (no es dato oficial)
+    mx = us != null ? us + 4.5 : 9.5;
+    sourceMx = us != null ? "estimado:US+4.5pp" : "estimado:9.5";
+  }
+  if (us == null) {
+    us = 4.3;
+    sourceUs = "estimado:4.3";
+  }
+
+  return NextResponse.json({
+    usAnnualPct: us,
+    mxAnnualPct: mx,
+    sourceUs,
+    sourceMx,
+    note: "Aproximaciones educativas. CETES/T-bill reales pueden diferir.",
+  });
 }

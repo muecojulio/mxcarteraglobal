@@ -1,15 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
-import { YahooProvider } from "@/lib/market-data/yahoo-provider";
-import { MockProvider } from "@/lib/market-data/mock-provider";
-import { searchMx } from "@/lib/mx-universe";
-import { sanitizeSearchQuery } from "@/lib/sanitize";
+import { searchMxUniverse, isInMxUniverse } from "@/lib/mx-universe";
 
+export const dynamic = "force-dynamic";
+
+/**
+ * GET /api/search?q=apple
+ * Solo BMV, BIVA y SIC (universo México).
+ */
 export async function GET(req: NextRequest) {
-  const q = sanitizeSearchQuery(req.nextUrl.searchParams.get("q"));
-  if (!q) return NextResponse.json({ results: [], count: 0, usingRealData: false, provider: "none" });
-  const y = new YahooProvider();
-  const remote = await y.search(q);
-  const local = searchMx(q).map((i) => ({ symbol: i.symbol, name: i.name, region: i.venue === "SIC" ? "US" : "MX", type: i.kind === "etf" ? "etf" : "stock" as const }));
-  const results = remote.length ? remote : [...local, ...(await new MockProvider().search(q))];
-  return NextResponse.json({ results, count: results.length, usingRealData: remote.length > 0, provider: remote.length ? "yahoo" : "local|mock" });
+  const q = req.nextUrl.searchParams.get("q")?.trim().slice(0, 40);
+
+  if (!q || q.length < 1) {
+    return NextResponse.json(
+      { error: "Parámetro 'q' requerido" },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const results = searchMxUniverse(q, 20);
+
+    return NextResponse.json({
+      results,
+      count: results.length,
+      universe: "BMV+BIVA+SIC",
+      usingRealData: true,
+      provider: "mx-universe",
+      hint:
+        results.length === 0
+          ? "No está en el catálogo BMV / BIVA / SIC de la app. Puedes ampliar el catálogo más adelante."
+          : undefined,
+    });
+  } catch (err) {
+    console.error("API /search error:", err);
+    return NextResponse.json(
+      { error: "Error en la búsqueda" },
+      { status: 500 }
+    );
+  }
 }

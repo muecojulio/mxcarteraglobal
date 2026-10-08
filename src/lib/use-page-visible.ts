@@ -1,24 +1,39 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 
-function subscribe(onChange: () => void) {
-  if (typeof document === "undefined") return () => undefined;
-  const handleChange = () => onChange();
-  document.addEventListener("visibilitychange", handleChange);
-  window.addEventListener("focus", handleChange);
-  window.addEventListener("blur", handleChange);
-  window.addEventListener("pageshow", handleChange);
-  return () => {
-    document.removeEventListener("visibilitychange", handleChange);
-    window.removeEventListener("focus", handleChange);
-    window.removeEventListener("blur", handleChange);
-    window.removeEventListener("pageshow", handleChange);
-  };
-}
-
+/** true solo cuando la pestaña/app está en primer plano */
 export function usePageVisible(): boolean {
-  return useSyncExternalStore(subscribe, isPageVisibleNow, () => true);
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    const read = () => {
+      if (typeof document === "undefined") return true;
+      return document.visibilityState === "visible" && !document.hidden;
+    };
+    setVisible(read());
+
+    const onVis = () => setVisible(read());
+    const onFocus = () => setVisible(true);
+    const onBlur = () => {
+      // en móvil blur no siempre = segundo plano; visibility es más fiable
+      setVisible(read());
+    };
+
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("pageshow", onVis);
+    window.addEventListener("blur", onBlur);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("pageshow", onVis);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, []);
+
+  return visible;
 }
 
 export function isPageVisibleNow(): boolean {

@@ -1,96 +1,644 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useQuotes } from "@/lib/market-data/client";
 import { useUsdMxn, toDisplay } from "@/lib/fx";
 import { RebalanceSuggestions } from "@/components/RebalanceSuggestions";
-import { Donut, yearsToGoal } from "@/components/portfolio/Donut";
-import { CollapsiblePanel } from "@/components/ui/CollapsiblePanel";
-type Position = { symbol: string; name?: string; quantity?: number; shares?: number; avgCost?: number; avgPrice?: number; currency?: "MXN" | "USD" };
+
+type Position = {
+  id: string;
+  symbol: string;
+  name: string;
+  quantity: number;
+  avgCost: number;
+  region: "MX" | "US";
+  market: string;
+  currency: "MXN" | "USD";
+};
+
 const POS_KEY = "marketpulse_positions";
 const GOAL_KEY = "marketpulse_goal";
 const PROJ_KEY = "marketpulse_projection";
-const COLORS = ["#f97316","#fb923c","#fbbf24","#a3e635","#34d399","#2dd4bf","#38bdf8","#818cf8","#e879f9","#f472b6"];
+
+const COLORS = [
+  "#f97316",
+  "#fb923c",
+  "#fbbf24",
+  "#a3e635",
+  "#34d399",
+  "#2dd4bf",
+  "#38bdf8",
+  "#818cf8",
+  "#e879f9",
+  "#f472b6",
+];
+
 function loadPositions(): Position[] {
   if (typeof window === "undefined") return [];
-  try { return JSON.parse(localStorage.getItem(POS_KEY) || "[]"); } catch { return []; }
+  try {
+    const raw = localStorage.getItem(POS_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
 }
+
 function formatMoney(value: number, currency: string) {
-  return new Intl.NumberFormat("es-MX", { style: "currency", currency: currency === "USD" ? "USD" : "MXN" }).format(value);
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: currency === "MXN" ? "MXN" : "USD",
+    maximumFractionDigits: 0,
+  }).format(value);
 }
+
+function formatPct(n: number) {
+  const s = n >= 0 ? "+" : "";
+  return `${s}${n.toFixed(2)}%`;
+}
+
+/** Proyección simple: valor * (1+g)^n + contribuciones anuales */
+function projectValue(
+  current: number,
+  years: number,
+  stockGrowth: number,
+  annualContribution: number
+) {
+  let v = current;
+  for (let y = 0; y < years; y++) {
+    v = v * (1 + stockGrowth) + annualContribution;
+  }
+  return v;
+}
+
+function yearsToGoal(
+  current: number,
+  goal: number,
+  stockGrowth: number,
+  annualContribution: number
+) {
+  if (goal <= current) return 0;
+  if (stockGrowth <= 0 && annualContribution <= 0) return Infinity;
+  let v = current;
+  let y = 0;
+  while (v < goal && y < 120) {
+    v = v * (1 + Math.max(stockGrowth, 0)) + Math.max(annualContribution, 0);
+    y++;
+  }
+  return y >= 120 ? Infinity : y;
+}
+
+function Donut({
+  slices,
+}: {
+  slices: Array<{ label: string; value: number; color: string }>;
+}) {
+  const total = slices.reduce((s, x) => s + x.value, 0) || 1;
+  const r = 42;
+  const c = 2 * Math.PI * r;
+  let offset = 0;
+  return (
+    <div className="relative w-48 h-48 mx-auto">
+      <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+        {slices.map((sl) => {
+          const pct = sl.value / total;
+          const dash = pct * c;
+          const el = (
+            <circle
+              key={sl.label}
+              cx="50"
+              cy="50"
+              r={r}
+              fill="none"
+              stroke={sl.color}
+              strokeWidth="12"
+              strokeDasharray={`${dash} ${c - dash}`}
+              strokeDashoffset={-offset}
+            />
+          );
+          offset += dash;
+          return el;
+        })}
+        <circle cx="50" cy="50" r="30" className="fill-[var(--card)]" />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <span className="text-xs font-semibold text-muted">Activos</span>
+      </div>
+    </div>
+  );
+}
+
 export default function PortfolioAnalysisPage() {
   const [positions, setPositions] = useState<Position[]>([]);
   const [goal, setGoal] = useState(3_000_000);
-  const [years, setYears] = useState(10);
-  const [growth, setGrowth] = useState(0.055);
-  const [contribution, setContribution] = useState(9_000);
-  const [showProj, setShowProj] = useState(true);
-  const { fx } = useUsdMxn();
+  const [years, setYears] = useState(1);
+  const [stockGrowth, setStockGrowth] = useState(0.055);
+  const [annualContribution, setAnnualContribution] = useState(9000);
+  const [showGoalEdit, setShowGoalEdit] = useState(false);
+  const [goalInput, setGoalInput] = useState("");
+  const [showProjEdit, setShowProjEdit] = useState(false);
+  const [displayCurrency, setDisplayCurrency] = useState<"USD" | "MXN">("MXN");
+  const { fx, loading: fxLoading } = useUsdMxn();
+  const usdMxn = fx?.usdMxn ?? 17;
+
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      setPositions(loadPositions());
-      try {
-        const g = localStorage.getItem(GOAL_KEY); if (g) setGoal(Number(g) || 3_000_000);
-        const p = JSON.parse(localStorage.getItem(PROJ_KEY) || "{}");
-        if (p.years) setYears(Number(p.years));
-        if (p.growth) setGrowth(Number(p.growth));
-        if (p.contribution) setContribution(Number(p.contribution));
-      } catch { /* */ }
-    });
-    return () => window.cancelAnimationFrame(frame);
+    setPositions(loadPositions());
+    try {
+      const g = localStorage.getItem(GOAL_KEY);
+      if (g) setGoal(Number(g) || 3_000_000);
+      const p = localStorage.getItem(PROJ_KEY);
+      if (p) {
+        const j = JSON.parse(p);
+        if (j.stockGrowth != null) setStockGrowth(Number(j.stockGrowth));
+        if (j.annualContribution != null)
+          setAnnualContribution(Number(j.annualContribution));
+      }
+    } catch {
+      /* */
+    }
   }, []);
-  const symbols = useMemo(() => positions.map((p) => p.symbol), [positions]);
-  const { data } = useQuotes(symbols, 60_000);
-  const rate = fx?.usdMxn ?? 17.5;
-  const rows = positions.map((p, i) => {
-    const qty = Number(p.quantity ?? p.shares ?? 0);
-    const cost = Number(p.avgCost ?? p.avgPrice ?? 0);
-    const live = data?.quotes.find((q) => q.symbol.toUpperCase() === String(p.symbol).toUpperCase());
-    const price = live?.price ?? cost;
-    const currency = (p.currency || (String(p.symbol).endsWith(".MX") ? "MXN" : "USD")) as "MXN" | "USD";
-    return { symbol: p.symbol, value: toDisplay(qty * price, currency, "MXN", rate), color: COLORS[i % COLORS.length] };
-  });
-  const total = rows.reduce((s, r) => s + r.value, 0);
-  let projected = total;
-  for (let i = 0; i < years; i++) projected = projected * (1 + growth) + contribution;
-  const eta = yearsToGoal(total, goal, growth, contribution);
+
+  const symbols = useMemo(
+    () => [...new Set(positions.map((p) => p.symbol))],
+    [positions]
+  );
+  const { data: quotesData, loading } = useQuotes(symbols, 30_000);
+
+  const priceMap = useMemo(() => {
+    const m = new Map<string, number>();
+    (quotesData?.quotes ?? []).forEach((q) =>
+      m.set(q.symbol.toUpperCase(), q.price)
+    );
+    return m;
+  }, [quotesData]);
+
+  // Valores en moneda nativa por posición; total mostrado mezclado por región dominante
+  const rows = useMemo(() => {
+    return positions.map((p) => {
+      const price = priceMap.get(p.symbol.toUpperCase()) ?? p.avgCost;
+      const marketValue = price * p.quantity;
+      const cost = p.avgCost * p.quantity;
+      const pnl = marketValue - cost;
+      const pnlPct = cost ? (pnl / cost) * 100 : 0;
+      return { ...p, price, marketValue, cost, pnl, pnlPct };
+    });
+  }, [positions, priceMap]);
+
+  const totalValue = rows.reduce((s, r) => {
+    const cur = (r.currency === "MXN" ? "MXN" : "USD") as "USD" | "MXN";
+    return s + toDisplay(r.marketValue, cur, displayCurrency, usdMxn);
+  }, 0);
+  const totalCost = rows.reduce((s, r) => {
+    const cur = (r.currency === "MXN" ? "MXN" : "USD") as "USD" | "MXN";
+    return s + toDisplay(r.cost, cur, displayCurrency, usdMxn);
+  }, 0);
+  const totalPnl = totalValue - totalCost;
+  const totalPnlPct = totalCost ? (totalPnl / totalCost) * 100 : 0;
+
+  // Asignación
+  const allocation = useMemo(() => {
+    return [...rows]
+      .map((r) => {
+        const cur = (r.currency === "MXN" ? "MXN" : "USD") as "USD" | "MXN";
+        const value = toDisplay(r.marketValue, cur, displayCurrency, usdMxn);
+        return { ...r, valueConv: value };
+      })
+      .sort((a, b) => b.valueConv - a.valueConv)
+      .map((r, i) => ({
+        label: r.symbol,
+        value: r.valueConv,
+        pct: totalValue ? (r.valueConv / totalValue) * 100 : 0,
+        color: COLORS[i % COLORS.length],
+      }));
+  }, [rows, totalValue, displayCurrency, usdMxn]);
+
+  const byRegion = useMemo(() => {
+    const mx = rows
+      .filter((r) => r.region === "MX")
+      .reduce((s, r) => {
+        const cur = (r.currency === "MXN" ? "MXN" : "USD") as "USD" | "MXN";
+        return s + toDisplay(r.marketValue, cur, displayCurrency, usdMxn);
+      }, 0);
+    const us = rows
+      .filter((r) => r.region === "US")
+      .reduce((s, r) => {
+        const cur = (r.currency === "MXN" ? "MXN" : "USD") as "USD" | "MXN";
+        return s + toDisplay(r.marketValue, cur, displayCurrency, usdMxn);
+      }, 0);
+    return [
+      { label: "México", value: mx, color: "#34d399" },
+      { label: "EE.UU.", value: us, color: "#38bdf8" },
+    ].filter((x) => x.value > 0);
+  }, [rows, displayCurrency, usdMxn]);
+
+  const future = projectValue(
+    totalValue,
+    years,
+    stockGrowth,
+    annualContribution
+  );
+  const ytg = yearsToGoal(
+    totalValue,
+    goal,
+    stockGrowth,
+    annualContribution
+  );
+  const goalPct = goal > 0 ? Math.min(100, (totalValue / goal) * 100) : 0;
+
+  // Serie simple para gráfico de proyección (por trimestre del primer año o por años)
+  const chartPoints = useMemo(() => {
+    const pts: number[] = [];
+    const steps = Math.min(years, 10);
+    for (let i = 0; i <= steps; i++) {
+      pts.push(projectValue(totalValue, i, stockGrowth, annualContribution));
+    }
+    return pts;
+  }, [totalValue, years, stockGrowth, annualContribution]);
+
+  const mainCurrency = displayCurrency;
+
+  const saveGoal = () => {
+    const n = Number(goalInput.replace(/,/g, ""));
+    if (n > 0) {
+      setGoal(n);
+      localStorage.setItem(GOAL_KEY, String(n));
+    }
+    setShowGoalEdit(false);
+  };
+
+  const saveProj = () => {
+    localStorage.setItem(
+      PROJ_KEY,
+      JSON.stringify({ stockGrowth, annualContribution })
+    );
+    setShowProjEdit(false);
+  };
+
   return (
     <div className="flex flex-col min-h-full">
-      <header className="sticky top-0 z-40 bg-background/95 border-b border-border safe-top">
-        <div className="flex items-center gap-3 px-4 h-14 max-w-lg mx-auto">
-          <Link href="/portfolio" className="ui-text-action text-primary text-sm">← Cartera</Link>
-          <h1 className="text-lg font-bold">Análisis</h1>
+      <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-md border-b border-border safe-top">
+        <div className="flex items-center gap-2 px-3 h-14 max-w-lg mx-auto">
+          <Link
+            href="/portfolio"
+            className="w-9 h-9 flex items-center justify-center text-muted text-lg"
+          >
+            ‹
+          </Link>
+          <h1 className="text-lg font-bold flex-1">Análisis de portafolio</h1>
+          <button
+            type="button"
+            onClick={() =>
+              setDisplayCurrency((c) => (c === "MXN" ? "USD" : "MXN"))
+            }
+            className="text-xs font-medium px-2.5 py-1.5 rounded-lg border border-border"
+          >
+            {displayCurrency}
+          </button>
         </div>
       </header>
-      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3">
-        <p className="text-sm">Valor {formatMoney(total, "MXN")} · meta {formatMoney(goal, "MXN")}</p>
-        {eta !== Infinity ? <p className="text-xs text-muted">Años a la meta ≈ {eta}</p> : <p className="text-xs text-muted">La meta no se alcanza con estos supuestos.</p>}
-        <Donut slices={rows.map((r) => ({ label: r.symbol, value: r.value, color: r.color }))} />
-        <label className="block space-y-1 text-xs font-medium" htmlFor="portfolio-goal">Meta de cartera (MXN)
-          <input id="portfolio-goal" className="ui-input" type="number" min="0" inputMode="decimal" value={goal} onChange={(e) => { const n = Number(e.target.value) || 0; setGoal(n); localStorage.setItem(GOAL_KEY, String(n)); }} />
-        </label>
-        {rows.map((r) => (
-          <p key={r.symbol} className="text-xs bg-card border border-border rounded-xl p-3">
-            <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ background: r.color }} />{r.symbol} · {formatMoney(r.value, "MXN")} {total ? `· ${((r.value / total) * 100).toFixed(1)}%` : ""}
-          </p>
-        ))}
-        <button id="portfolio-projection-toggle" type="button" className="ui-btn ui-btn-secondary w-full" aria-expanded={showProj} aria-controls="portfolio-projection-panel" onClick={() => setShowProj((v) => !v)}>
-          {showProj ? "Ocultar proyección" : "Mostrar proyección"}
-        </button>
-        <CollapsiblePanel id="portfolio-projection-panel" labelledBy="portfolio-projection-toggle" open={showProj} className="bg-card border border-border rounded-xl p-3 space-y-2 text-sm">
-          <p>A {years} años ≈ {formatMoney(projected, "MXN")}</p>
-          <label className="block text-xs font-medium" htmlFor="portfolio-years">Años de proyección
-            <input id="portfolio-years" type="range" min={1} max={30} value={years} onChange={(e) => { const n = Number(e.target.value); setYears(n); localStorage.setItem(PROJ_KEY, JSON.stringify({ years: n, growth, contribution })); }} />
-          </label>
-          <label className="block text-xs font-medium" htmlFor="portfolio-growth">Crecimiento anual estimado (%)
-            <input id="portfolio-growth" type="range" min={0} max={20} value={Math.round(growth * 100)} onChange={(e) => { const n = Number(e.target.value) / 100; setGrowth(n); localStorage.setItem(PROJ_KEY, JSON.stringify({ years, growth: n, contribution })); }} />
-          </label>
-          <label className="block space-y-1 text-xs font-medium" htmlFor="portfolio-contribution">Aportación anual (MXN)
-            <input id="portfolio-contribution" className="ui-input" type="number" min="0" inputMode="decimal" value={contribution} onChange={(e) => { const n = Number(e.target.value) || 0; setContribution(n); localStorage.setItem(PROJ_KEY, JSON.stringify({ years, growth, contribution: n })); }} />
-          </label>
-        </CollapsiblePanel>
-        <RebalanceSuggestions />
+
+      <main className="flex-1 max-w-lg mx-auto w-full px-4 pb-10 space-y-6 pt-4">
+        {positions.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-4xl mb-3">💼</p>
+            <p className="font-medium">Sin posiciones</p>
+            <p className="text-sm text-muted mt-1">
+              Añade activos en Cartera para ver el análisis
+            </p>
+            <Link
+              href="/portfolio"
+              className="inline-block mt-4 text-primary text-sm font-medium"
+            >
+              Ir a Cartera →
+            </Link>
+          </div>
+        ) : (
+          <>
+            {/* Valor + P/L */}
+            <section className="text-center">
+              <p className="text-xs text-muted">Valor de mercado</p>
+              <p className="text-3xl font-bold tracking-tight mt-1">
+                {loading ? "…" : formatMoney(totalValue, mainCurrency)}
+              </p>
+              <div className="mt-3 space-y-1 text-sm">
+                <p>
+                  P/G abierto{" "}
+                  <span
+                    className={
+                      totalPnl >= 0 ? "text-success font-medium" : "text-danger font-medium"
+                    }
+                  >
+                    {totalPnl >= 0 ? "↑" : "↓"}
+                    {formatMoney(Math.abs(totalPnl), mainCurrency)}{" "}
+                    {formatPct(totalPnlPct)}
+                  </span>
+                </p>
+                <p className="text-muted text-xs">
+                  P/G cerradas — (no registradas aún)
+                </p>
+                <p>
+                  P/G total{" "}
+                  <span
+                    className={
+                      totalPnl >= 0 ? "text-success font-medium" : "text-danger font-medium"
+                    }
+                  >
+                    {formatPct(totalPnlPct)}
+                  </span>
+                </p>
+              </div>
+              <p className="text-[10px] text-muted mt-2">
+                Unificado con TC: 1 USD = {fxLoading ? "…" : usdMxn.toFixed(4)} MXN
+                {fx?.source ? ` (${fx.source})` : ""}
+              </p>
+            </section>
+
+            {/* Meta */}
+            <section className="bg-card rounded-xl border border-border p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-sm font-semibold">Meta de valor de mercado</h2>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGoalInput(String(goal));
+                    setShowGoalEdit(true);
+                  }}
+                  className="text-xs text-primary font-medium"
+                >
+                  Establecer meta
+                </button>
+              </div>
+              <p className="text-xl font-bold">
+                {formatMoney(totalValue, mainCurrency)}
+                <span className="text-muted text-sm font-normal">
+                  {" "}
+                  / {formatMoney(goal, mainCurrency)}
+                </span>
+              </p>
+              <div className="h-2 rounded-full bg-secondary mt-3 overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 rounded-full"
+                  style={{ width: `${goalPct}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-muted mt-2">
+                {goalPct.toFixed(0)}% ·{" "}
+                {ytg === Infinity
+                  ? "Ajusta crecimiento o aportaciones para estimar el plazo"
+                  : ytg === 0
+                  ? "Ya alcanzaste la meta"
+                  : `Estimación: ~${ytg} años con la proyección actual. Solo fines educativos.`}
+              </p>
+            </section>
+
+            {/* Valor futuro */}
+            <section className="bg-card rounded-xl border border-border p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-sm font-semibold">Valor futuro</h2>
+                <button
+                  type="button"
+                  onClick={() => setShowProjEdit(true)}
+                  className="text-xs text-primary font-medium"
+                >
+                  Definir valores ›
+                </button>
+              </div>
+              <p className="text-2xl font-bold">
+                {formatMoney(future, mainCurrency)}
+              </p>
+              <p className="text-xs text-muted mt-0.5">
+                Valor de mercado estimado ({years} año{years > 1 ? "s" : ""})
+              </p>
+              <div className="flex gap-2 mt-3 overflow-x-auto no-scrollbar">
+                {[1, 3, 5, 10, 25, 40].map((y) => (
+                  <button
+                    key={y}
+                    type="button"
+                    onClick={() => setYears(y)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium shrink-0 ${
+                      years === y
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-muted"
+                    }`}
+                  >
+                    {y} {y === 1 ? "Año" : ""}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2 mt-3">
+                <span className="text-[11px] px-2 py-1 rounded-full bg-secondary">
+                  Crecimiento acción {(stockGrowth * 100).toFixed(1)}%
+                </span>
+                <span className="text-[11px] px-2 py-1 rounded-full bg-secondary">
+                  Aporte anual {formatMoney(annualContribution, mainCurrency)}
+                </span>
+              </div>
+              {/* Mini chart */}
+              {chartPoints.length > 1 && (
+                <div className="mt-4 h-24">
+                  <svg
+                    viewBox="0 0 300 80"
+                    className="w-full h-full"
+                    preserveAspectRatio="none"
+                  >
+                    <defs>
+                      <linearGradient id="fg" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#10b981" stopOpacity="0.35" />
+                        <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+                      </linearGradient>
+                    </defs>
+                    {(() => {
+                      const min = Math.min(...chartPoints);
+                      const max = Math.max(...chartPoints);
+                      const span = max - min || 1;
+                      const pts = chartPoints
+                        .map((v, i) => {
+                          const x =
+                            (i / (chartPoints.length - 1)) * 300;
+                          const y = 70 - ((v - min) / span) * 60;
+                          return `${x},${y}`;
+                        })
+                        .join(" ");
+                      const area =
+                        `0,80 ` +
+                        chartPoints
+                          .map((v, i) => {
+                            const x =
+                              (i / (chartPoints.length - 1)) * 300;
+                            const y = 70 - ((v - min) / span) * 60;
+                            return `${x},${y}`;
+                          })
+                          .join(" ") +
+                        ` 300,80`;
+                      return (
+                        <>
+                          <polygon fill="url(#fg)" points={area} />
+                          <polyline
+                            fill="none"
+                            stroke="#10b981"
+                            strokeWidth="2"
+                            points={pts}
+                          />
+                        </>
+                      );
+                    })()}
+                  </svg>
+                </div>
+              )}
+              <p className="text-[11px] text-muted mt-2 leading-relaxed">
+                Proyección educativa asumiendo reinversión y tasas constantes.
+                No garantiza resultados reales.
+              </p>
+            </section>
+
+            {/* Asignación */}
+            <section className="bg-card rounded-xl border border-border p-4">
+              <h2 className="text-sm font-semibold mb-3">
+                Asignación de activos
+              </h2>
+              <Donut slices={allocation} />
+              <div className="mt-4 space-y-2">
+                {allocation.map((a) => (
+                  <div
+                    key={a.label}
+                    className="flex items-center justify-between text-sm"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ background: a.color }}
+                      />
+                      <span className="truncate font-medium">{a.label}</span>
+                    </div>
+                    <span className="text-muted shrink-0">
+                      {a.pct.toFixed(1)}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <RebalanceSuggestions
+              positions={rows.map((r) => ({
+                symbol: r.symbol,
+                name: r.name,
+                marketValue: toDisplay(
+                  r.marketValue,
+                  (r.currency === "MXN" ? "MXN" : "USD") as "USD" | "MXN",
+                  displayCurrency,
+                  usdMxn
+                ),
+                region: r.region,
+                currency: r.currency,
+              }))}
+              displayCurrency={displayCurrency}
+            />
+
+            {/* Por región (en lugar de sectores PRO) */}
+            {byRegion.length > 0 && (
+              <section className="bg-card rounded-xl border border-border p-4">
+                <h2 className="text-sm font-semibold mb-3">Por mercado</h2>
+                <Donut slices={byRegion} />
+                <div className="mt-3 space-y-2">
+                  {byRegion.map((a) => (
+                    <div
+                      key={a.label}
+                      className="flex justify-between text-sm"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full"
+                          style={{ background: a.color }}
+                        />
+                        {a.label}
+                      </span>
+                      <span className="text-muted">
+                        {totalValue
+                          ? ((a.value / totalValue) * 100).toFixed(1)
+                          : 0}
+                        %
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+          </>
+        )}
       </main>
+
+      {/* Modal meta */}
+      {showGoalEdit && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowGoalEdit(false)}
+          />
+          <div className="relative bg-card rounded-t-2xl sm:rounded-2xl w-full max-w-lg p-4 safe-bottom">
+            <h3 className="font-semibold mb-3">Meta de valor</h3>
+            <input
+              type="number"
+              value={goalInput}
+              onChange={(e) => setGoalInput(e.target.value)}
+              className="w-full bg-background border border-border rounded-xl py-2.5 px-3 text-sm mb-3"
+              placeholder="3000000"
+            />
+            <button
+              type="button"
+              onClick={saveGoal}
+              className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm"
+            >
+              Guardar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal proyección */}
+      {showProjEdit && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowProjEdit(false)}
+          />
+          <div className="relative bg-card rounded-t-2xl sm:rounded-2xl w-full max-w-lg p-4 space-y-3 safe-bottom">
+            <h3 className="font-semibold">Parámetros de proyección</h3>
+            <div>
+              <label className="text-xs text-muted">
+                Crecimiento anual de la cartera (ej. 0.055 = 5.5%)
+              </label>
+              <input
+                type="number"
+                step="0.001"
+                value={stockGrowth}
+                onChange={(e) => setStockGrowth(Number(e.target.value) || 0)}
+                className="w-full bg-background border border-border rounded-xl py-2.5 px-3 text-sm mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted">
+                Aportación anual
+              </label>
+              <input
+                type="number"
+                value={annualContribution}
+                onChange={(e) =>
+                  setAnnualContribution(Number(e.target.value) || 0)
+                }
+                className="w-full bg-background border border-border rounded-xl py-2.5 px-3 text-sm mt-1"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={saveProj}
+              className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm"
+            >
+              Guardar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
