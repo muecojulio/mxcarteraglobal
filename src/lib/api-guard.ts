@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { clientKeyFromForwardedFor, clientKeyFromRealIp } from "./client-ip";
+import { resolveClientKey } from "./client-ip";
 
 const WINDOW_MS = 60_000;
 const MAX_PER_WINDOW = 45;
@@ -20,15 +20,15 @@ type Bucket = { start: number; count: number };
 const buckets = new Map<string, Bucket>();
 
 function clientKey(req: NextRequest): string {
-  // El primer valor de `x-forwarded-for` lo controla quien llama; el último lo
-  // puso el proxy de confianza (ver `client-ip.ts`).
-  const forwarded = clientKeyFromForwardedFor(req.headers.get("x-forwarded-for"));
-  if (forwarded) return forwarded;
-
-  const real = clientKeyFromRealIp(req.headers.get("x-real-ip"));
-  if (real) return real;
-
-  return "local";
+  // Modelo de confianza en `client-ip.ts`: Vercel (su borde reescribe el
+  // header), proxy propio declarado con TRUST_PROXY=1, o cubo compartido.
+  return resolveClientKey({
+    forwardedFor: req.headers.get("x-forwarded-for"),
+    realIp: req.headers.get("x-real-ip"),
+    onVercel: process.env.VERCEL === "1",
+    trustProxyHop: process.env.TRUST_PROXY === "1",
+    development: process.env.NODE_ENV !== "production",
+  });
 }
 
 function sweep(now: number): void {
@@ -46,12 +46,18 @@ function sweep(now: number): void {
 }
 
 /**
- * Límite por IP en memoria.
+ * Límite por cliente en memoria.
  *
- * Nota de despliegue: en serverless el contador vive por instancia, así que el
- * límite real es aproximado (N instancias → hasta N × MAX_PER_WINDOW). Sirve
- * para frenar abuso casual y ahorrar cuota de las fuentes de datos; no es un
- * límite distribuido.
+ * Alcance real, sin adornos:
+ * - En serverless el contador vive **por instancia**, así que el tope efectivo
+ *   es hasta N × MAX_PER_WINDOW con N instancias. No es un límite distribuido
+ *   (eso requeriría un almacén compartido tipo Upstash/Vercel KV, con su propia
+ *   credencial y costo).
+ * - Sin proxy de confianza, todos los clientes comparten un cubo y el límite es
+ *   global (ver `client-ip.ts`).
+ *
+ * Sirve para frenar abuso casual y para que las cachés de `next: { revalidate }`
+ * absorban la mayor parte del tráfico antes de llegar a las fuentes de datos.
  */
 export function rateLimit(req: NextRequest): NextResponse | null {
   const key = clientKey(req);

@@ -26,25 +26,6 @@ const nextConfig: NextConfig = {
             key: "Permissions-Policy",
             value: "camera=(), microphone=(), geolocation=()",
           },
-          {
-            key: "Content-Security-Policy",
-            value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-inline'",
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob: https:",
-              "font-src 'self' data:",
-              // `connect-src` también gobierna los WebSocket: sin el origen wss
-              // de Finnhub, la CSP bloqueaba los precios en vivo
-              // (`new WebSocket("wss://ws.finnhub.io?token=…")` en
-              // `src/lib/market-data/realtime.ts`) y el badge se quedaba en
-              // "sin conexión". `'self'` cubre el resto de fetch de la app.
-              "connect-src 'self' wss://ws.finnhub.io",
-              process.env.NODE_ENV === "development" ? "frame-ancestors 'self' https://*.arena.ai https://arena.ai https://*.e2b.app" : "frame-ancestors 'none'",
-              "base-uri 'self'",
-              "form-action 'self'",
-            ].join("; "),
-          },
         ],
       },
     ];
@@ -52,3 +33,9 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+
+/**
+ * Nota: la `Content-Security-Policy` **no** se pone aquí. Necesita un nonce por
+ * petición (para poder prescindir de `'unsafe-inline'` en `script-src`) y eso
+ * solo puede generarse en tiempo de ejecución: ver `src/proxy.ts` y `src/lib/csp.ts`.
+ */

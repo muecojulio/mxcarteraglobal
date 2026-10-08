@@ -132,9 +132,12 @@ export function CloudVaultPanel() {
           dispositivo usa el mismo NIP (si lo configuraste).
         </p>
         <p className="text-[11px] text-muted leading-relaxed">
-          La nube no puede leer el paquete, pero quien consiga el ID podría
-          intentar adivinar tu clave: entre más larga, mejor (un NIP de 4
-          dígitos es corto para eso).
+          La nube no puede leer el paquete, pero el{" "}
+          <span className="text-foreground">ID no debe publicarse</span>: quien
+          lo tenga puede reemplazar o borrar tu copia (jsonblob no pide
+          permisos). La clave protege el contenido, no la disponibilidad. Usa
+          una clave de 6 caracteres o más: con una corta se puede probar el
+          espacio completo.
         </p>
         <p className="text-xs">
           Estado del cifrado:{" "}
@@ -153,7 +156,7 @@ export function CloudVaultPanel() {
           type="password"
           aria-label="Clave de nube"
           className="w-full min-h-[48px] rounded-xl border border-border px-3 bg-background"
-          placeholder="Clave de nube (usa tu NIP)"
+          placeholder="Clave de nube (6+ caracteres)"
           value={cloudPass}
           onChange={(e) => setCloudPass(e.target.value)}
         />

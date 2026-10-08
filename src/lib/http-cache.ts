@@ -55,7 +55,6 @@ const POLICIES: Record<string, CachePolicy> = {
 
   // Datos del usuario o secretos: nunca cacheables.
   "/api/sync": PRIVATE,
-  "/api/realtime/token": PRIVATE,
 };
 
 export function policyFor(pathname: string): CachePolicy {

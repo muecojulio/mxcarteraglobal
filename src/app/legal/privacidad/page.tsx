@@ -117,9 +117,9 @@ export default function PrivacidadPage() {
           <ul className="text-xs space-y-1 list-disc pl-5">
             <li>
               <span className="text-foreground">Con clave activada:</span> la
-              llave maestra se deriva de tu clave con PBKDF2 (120.000
-              iteraciones, SHA-256) y solo se guarda envuelta. Sin tu clave no
-              se puede leer la cartera.
+              llave maestra se deriva de tu clave con PBKDF2-SHA256 (210.000
+              iteraciones y salt propia) y solo se guarda envuelta. Sin tu clave
+              no se puede leer la cartera.
             </li>
             <li>
               <span className="text-foreground">Sin clave activada:</span> se usa
@@ -235,7 +235,7 @@ export default function PrivacidadPage() {
             <code className="text-xs">Cache Storage</code> (service worker) para
             funcionar sin conexión. El almacenamiento del service worker está
             acotado en número de entradas y caducidad, y excluye de forma
-            explícita las rutas de respaldo cifrado y de entrega de tokens.
+            explícita la ruta de respaldo cifrado.
           </p>
           <p>
             Puedes borrar todo el almacenamiento local desde los ajustes de tu
@@ -248,16 +248,16 @@ export default function PrivacidadPage() {
           <h2 className="text-foreground font-semibold">8. Seguridad</h2>
           <ul className="text-xs space-y-1 list-disc pl-5">
             <li>Todas las comunicaciones viajan por HTTPS con HSTS.</li>
-            <li>Las claves de las fuentes de datos se usan en el servidor y no se incrustan en el código del cliente.</li>
             <li>
-              Excepción: si el administrador configura{" "}
-              <code className="text-xs">FINNHUB_API_KEY</code> y usas el flujo de
-              trades en tiempo real, esa clave se entrega a tu navegador porque
-              el WebSocket de Finnhub la exige en el cliente. Es la única clave
-              que sale del servidor; el resto no.
+              Todas las claves de las fuentes de datos (incluida{" "}
+              <code className="text-xs">FINNHUB_API_KEY</code>) se usan solo en
+              el servidor: el navegador nunca las recibe. Las cotizaciones se
+              actualizan pidiendo datos a rutas propias de la app, no
+              conectándose a los proveedores desde tu dispositivo.
             </li>
-            <li>Las rutas <code className="text-xs">/api/*</code> rechazan peticiones de otros orígenes y aplican límite de peticiones por IP.</li>
-            <li>El cifrado local usa AES-GCM con llave derivada de tu clave (PBKDF2, 120.000 iteraciones). El hash de la clave se guarda en tu dispositivo; el servidor no lo recibe.</li>
+            <li>Las rutas <code className="text-xs">/api/*</code> rechazan peticiones de otros orígenes y aplican límite de peticiones por cliente.</li>
+            <li>El cifrado local usa AES-GCM con llave derivada de tu clave con PBKDF2-SHA256 (210.000 iteraciones y salt propia del dispositivo). El verificador de la clave se guarda en tu dispositivo; el servidor no lo recibe.</li>
+            <li>La clave de acceso pide un mínimo de 6 caracteres y el bloqueo tras intentos fallidos es progresivo.</li>
             <li>Bloqueo tras intentos fallidos de clave y código de recuperación opcional.</li>
           </ul>
           <p className="text-xs">

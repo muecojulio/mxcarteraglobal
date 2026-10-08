@@ -2,8 +2,8 @@
 //
 // Reglas de caché (esto es caché OFFLINE del dispositivo, distinta de la caché
 // HTTP del edge que fija Cache-Control en las rutas /api/*):
-//   1. Nunca se guarda lo marcado `no-store` ni las rutas sensibles: el token de
-//      Finnhub y los respaldos cifrados no deben quedar en Cache Storage.
+//   1. Nunca se guarda lo marcado `no-store` ni las rutas sensibles: los
+//      respaldos cifrados no deben quedar en Cache Storage.
 //   2. La caché tiene tope de entradas y caducidad; antes crecía sin límite.
 //   3. Si falla una petición de /api/* se responde JSON, no el HTML de la app.
 
@@ -11,7 +11,7 @@ const CACHE_NAME = "marketpulse-v2";
 const OFFLINE_URLS = ["/", "/watchlist", "/portfolio", "/more"];
 
 // Rutas que jamás entran en Cache Storage.
-const NEVER_CACHE = ["/api/sync", "/api/realtime/token"];
+const NEVER_CACHE = ["/api/sync"];
 
 const MAX_ENTRIES = 120;
 const API_TTL_MS = 5 * 60 * 1000; // 5 min

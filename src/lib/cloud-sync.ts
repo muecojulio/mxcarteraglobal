@@ -102,8 +102,17 @@ export async function applyEnvelope(
   applySyncPayload(parsed.data || {});
 }
 
+/** Mínimo para crear respaldos nuevos. */
+export const CLOUD_PASS_MIN = 6;
+/** Mínimo para *bajar*: los respaldos ya subidos con claves cortas deben poder abrirse. */
+const CLOUD_PASS_LEGACY_MIN = 4;
+
 export async function pushCloud(pass: string): Promise<{ id: string }> {
-  if (!pass || pass.length < 4) throw new Error("Escribe una clave de nube (mín. 4)");
+  if (!pass || pass.length < CLOUD_PASS_MIN) {
+    throw new Error(
+      `Escribe una clave de nube de al menos ${CLOUD_PASS_MIN} caracteres`
+    );
+  }
   const env = await buildEnvelope(pass);
   const id = getSyncId();
   const res = await fetch("/api/sync", {
@@ -120,7 +129,9 @@ export async function pushCloud(pass: string): Promise<{ id: string }> {
 }
 
 export async function pullCloud(id?: string, pass?: string): Promise<void> {
-  if (!pass || pass.length < 4) throw new Error("Escribe la misma clave de nube");
+  if (!pass || pass.length < CLOUD_PASS_LEGACY_MIN) {
+    throw new Error("Escribe la misma clave de nube");
+  }
   const useId = (id || getSyncId() || "").trim();
   if (!useId) throw new Error("No hay ID de nube");
   const res = await fetch(`/api/sync?id=${encodeURIComponent(useId)}`);
@@ -129,7 +140,15 @@ export async function pullCloud(id?: string, pass?: string): Promise<void> {
   if (!isSyncEnvelope(json.envelope)) {
     throw new Error("El respaldo no tiene el formato esperado");
   }
-  await applyEnvelope(json.envelope, pass);
+  try {
+    await applyEnvelope(json.envelope, pass);
+  } catch {
+    // AES-GCM no distingue "clave incorrecta" de "dato alterado": si el blob lo
+    // reemplazó alguien que tenía el ID, el resultado es el mismo.
+    throw new Error(
+      "No se pudo descifrar: revisa la clave (o la copia en la nube fue reemplazada o está dañada)"
+    );
+  }
   localStorage.setItem(SYNC_ID_KEY, useId);
   persistSetString(SYNC_ID_KEY, useId);
   localStorage.setItem(SYNC_AT_KEY, new Date().toISOString());

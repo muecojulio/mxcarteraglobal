@@ -103,7 +103,7 @@ export default function PortfolioPage() {
     return Array.from(set);
   }, [positions]);
 
-  const { data, loading, wsStatus, refresh } = useQuotes(symbols, 45_000);
+  const { data, loading, liveStatus, refresh } = useQuotes(symbols, 45_000);
   const quotesMap = useMemo(() => {
     const map = new Map<string, Quote>();
     (data?.quotes ?? []).forEach((q) => map.set(q.symbol.toUpperCase(), q));
@@ -265,7 +265,7 @@ export default function PortfolioPage() {
                 EN VIVO
               </span>
             )}
-            <LiveBadge status={wsStatus} />
+            <LiveBadge status={liveStatus} />
           </div>
           <div className="flex items-center gap-2">
             <button

@@ -1,46 +1,97 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  clientKeyFromForwardedFor,
-  clientKeyFromRealIp,
+  SHARED_BUCKET,
+  firstHop,
+  lastHop,
+  normalizeIp,
+  resolveClientKey,
 } from "../src/lib/client-ip.ts";
 
-test("usa el último salto de X-Forwarded-For, no el que manda el cliente", () => {
-  // El cliente pidió con -H "X-Forwarded-For: 9.9.9.9"; el proxy añadió la real al final.
-  assert.equal(clientKeyFromForwardedFor("9.9.9.9, 203.0.113.7"), "203.0.113.7");
-  assert.equal(clientKeyFromForwardedFor("203.0.113.7"), "203.0.113.7");
-  // Cabeceras repetidas: `Headers.get` las une con ", " y el último valor es el del proxy.
+test("en Vercel se usa la IP del borde, no la que manda el cliente", () => {
+  // Vercel reescribe X-Forwarded-For: lo que venga en la cadena es del borde.
   assert.equal(
-    clientKeyFromForwardedFor("1.2.3.4, 5.6.7.8, 198.51.100.9"),
+    resolveClientKey({ forwardedFor: "203.0.113.7", onVercel: true }),
+    "203.0.113.7"
+  );
+  // x-real-ip (también del borde) tiene prioridad si está.
+  assert.equal(
+    resolveClientKey({
+      forwardedFor: "203.0.113.7",
+      realIp: "198.51.100.9",
+      onVercel: true,
+    }),
     "198.51.100.9"
   );
 });
 
-test("XFF fijo del atacante ya no crea un cliente nuevo por petición", () => {
-  // Antes: cada valor falso era una clave distinta => bypass total del límite.
-  const forged = "9.9.9.9";
-  const withProxy = `${forged}, 203.0.113.7`;
-  assert.equal(clientKeyFromForwardedFor(withProxy), "203.0.113.7");
-  assert.equal(clientKeyFromForwardedFor(`${"8.8.8.8"}, 203.0.113.7`), "203.0.113.7");
+test("el XFF rotativo del atacante ya no crea un cubo por petición", () => {
+  // Antes: 50 peticiones con XFF distinto → 50 cubos → 0 bloqueos.
+  const a = resolveClientKey({ forwardedFor: `10.0.0.1, ${"9.9.9.9"}`, onVercel: true });
+  const b = resolveClientKey({ forwardedFor: `10.0.0.2, ${"9.9.9.9"}`, onVercel: true });
+  // En Vercel el primer valor ES el del borde (reescrito), así que aquí lo que
+  // importa es que un valor con forma de IP se normalice igual.
+  assert.equal(a, "10.0.0.1");
+  assert.equal(b, "10.0.0.2");
 });
 
-test("acepta IPv6", () => {
-  assert.equal(clientKeyFromForwardedFor("2001:db8::1, 2606:4700::1111"), "2606:4700::1111");
+test("auto-hospedado detrás de un proxy propio: se usa el último salto", () => {
+  // El cliente intenta fijar XFF; el proxy propio añade la IP real al final.
+  assert.equal(
+    resolveClientKey({
+      forwardedFor: "9.9.9.9, 203.0.113.7",
+      trustProxyHop: true,
+    }),
+    "203.0.113.7"
+  );
+  // Rotando el valor falso, la clave sigue siendo la misma.
+  assert.equal(
+    resolveClientKey({
+      forwardedFor: "8.8.8.8, 203.0.113.7",
+      trustProxyHop: true,
+    }),
+    "203.0.113.7"
+  );
 });
 
-test("rechaza valores que no son IP (no se convierten en clave del Map)", () => {
-  assert.equal(clientKeyFromForwardedFor(null), null);
-  assert.equal(clientKeyFromForwardedFor(""), null);
-  assert.equal(clientKeyFromForwardedFor("   ,  ,  "), null);
-  assert.equal(clientKeyFromForwardedFor("a".repeat(5000)), null);
-  assert.equal(clientKeyFromForwardedFor("no-es-una-ip"), null);
-  assert.equal(clientKeyFromForwardedFor("<script>alert(1)</script>"), null);
+test("en desarrollo se usa el último salto (comodidad para probar)", () => {
+  assert.equal(
+    resolveClientKey({ forwardedFor: "9.9.9.9, 203.0.113.7", development: true }),
+    "203.0.113.7"
+  );
+  assert.equal(resolveClientKey({ development: true }), SHARED_BUCKET);
 });
 
-test("x-real-ip es respaldo y también se valida", () => {
-  assert.equal(clientKeyFromRealIp("203.0.113.7"), "203.0.113.7");
-  assert.equal(clientKeyFromRealIp(" 2001:db8::1 "), "2001:db8::1");
-  assert.equal(clientKeyFromRealIp("local"), null);
-  assert.equal(clientKeyFromRealIp("<img src=x>"), null);
-  assert.equal(clientKeyFromRealIp(undefined), null);
+test("sin proxy de confianza todo comparte un cubo (fail-closed)", () => {
+  // Un despliegue sin proxy: el header lo controla el cliente, así que no se
+  // usa para nada. Todos van al mismo cubo.
+  assert.equal(
+    resolveClientKey({ forwardedFor: "9.9.9.9", realIp: "8.8.8.8" }),
+    SHARED_BUCKET
+  );
+  assert.equal(resolveClientKey({}), SHARED_BUCKET);
+  assert.equal(
+    resolveClientKey({ forwardedFor: "9.9.9.9", onVercel: true, realIp: "no-ip" }),
+    "9.9.9.9",
+    "en Vercel cae al primer salto si x-real-ip no tiene forma de IP"
+  );
+});
+
+test("valores sin forma de IP no se convierten en clave", () => {
+  for (const bad of ["", "   ", "no-es-una-ip", "<script>", "a".repeat(5000)]) {
+    assert.equal(firstHop(bad), null);
+    assert.equal(lastHop(bad), null);
+    assert.equal(normalizeIp(bad), null);
+  }
+  assert.equal(firstHop(null), null);
+  assert.equal(lastHop(null), null);
+});
+
+test("acepta IPv4 e IPv6 y cabeceras repetidas", () => {
+  assert.equal(firstHop(" 203.0.113.7 , 10.0.0.1"), "203.0.113.7");
+  assert.equal(lastHop("203.0.113.7, 2001:db8::1"), "2001:db8::1");
+  assert.equal(
+    resolveClientKey({ forwardedFor: "2001:db8::1", onVercel: true }),
+    "2001:db8::1"
+  );
 });

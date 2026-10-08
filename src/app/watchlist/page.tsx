@@ -39,7 +39,7 @@ export default function WatchlistPage() {
     saveWatchlist(symbols);
   }, [symbols, hydrated]);
 
-  const { data, loading, wsStatus, error, refresh } = useQuotes(symbols, 45_000);
+  const { data, loading, liveStatus, error, refresh } = useQuotes(symbols, 45_000);
   const { fx } = useUsdMxn(120_000);
   const usdMxn = fx?.usdMxn ?? null;
 
@@ -104,7 +104,7 @@ export default function WatchlistPage() {
                 EN VIVO
               </span>
             )}
-            <LiveBadge status={wsStatus} />
+            <LiveBadge status={liveStatus} />
           </div>
           <div className="flex items-center gap-2">
             <button

@@ -74,6 +74,12 @@ Tres avisos en `/legal`: [aviso de no asesoría](./src/app/legal/aviso/page.tsx)
 
 > Antes de publicar, sustituye `CONTACTO_ARCO` en `src/app/legal/privacidad/page.tsx` por el correo definitivo del responsable.
 
+## Seguridad
+
+Decisiones y riesgos aceptados en **[docs/SEGURIDAD.md](./docs/SEGURIDAD.md)**:
+llaves solo en el servidor, límite de peticiones por cliente, clave de acceso con
+PBKDF2 y mínimo 6 caracteres, respaldo cifrado en la nube y CSP con nonce.
+
 ## Datos, índices y caché
 
 No hay base de datos SQL: la app persiste en el dispositivo. El único índice del proyecto es el **índice invertido de trigramas** del catálogo en memoria (`src/lib/catalog-index.ts`), que evita re-normalizar los ~917 valores del universo en cada tecla escrita (~20x más rápido, verificado por `tests/catalog-index.test.mjs`).
