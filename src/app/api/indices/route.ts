@@ -1,9 +1,29 @@
 import { NextResponse } from "next/server";
-import { YahooProvider } from "@/lib/market-data/yahoo-provider";
-import { MockProvider } from "@/lib/market-data/mock-provider";
+import { getMarketDataProvider, isUsingRealData } from "@/lib/market-data";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * GET /api/indices
+ */
 export async function GET() {
-  const y = new YahooProvider();
-  const m = new MockProvider();
-  const indices = (await y.getIndices()).length ? await y.getIndices() : await m.getIndices();
-  return NextResponse.json({ indices, count: indices.length, usingRealData: indices.length > 0, provider: "yahoo|mock" });
+  try {
+    const provider = getMarketDataProvider();
+    const indices = provider.getIndices
+      ? await provider.getIndices()
+      : [];
+
+    return NextResponse.json({
+      indices,
+      count: indices.length,
+      usingRealData: isUsingRealData(),
+      provider: provider.name,
+    });
+  } catch (err) {
+    console.error("API /indices error:", err);
+    return NextResponse.json(
+      { error: "Error al obtener índices" },
+      { status: 500 }
+    );
+  }
 }

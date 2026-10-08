@@ -1,37 +1,82 @@
-# MX Cartera Global
+# MarketPulse
 
-Seguimiento de mercados — México · EE.UU. · Mundiales · PWA.
+Seguimiento de mercados — **México · EE.UU. · Mundiales** · 100% gratuita · PWA multiplataforma
 
-Desplegable directamente en **Vercel** sin pasos adicionales.
+## Enlace y código QR
 
-## Requisitos
+Abre **`/install`** en la app (Más → Instalar / QR):
 
-- Node.js **24.x** (alineado con el runtime actual de Vercel)
+- Enlace para copiar o compartir
+- Código QR para escanear con otro teléfono
+- Instrucciones por dispositivo
+
+Cuando publiques la app (ej. `https://tudominio.com`), el QR apuntará a esa URL automáticamente.
+
+## Instalar en cualquier dispositivo
+
+| Dispositivo | Cómo instalar |
+|-------------|---------------|
+| **iPhone / iPad** | Safari → botón Compartir → **Añadir a pantalla de inicio** |
+| **Android** | Chrome → menú ⋮ → **Instalar app** / Añadir a inicio |
+| **Windows / Mac / Linux** | Chrome o Edge → icono de instalar en la barra de direcciones (o menú → Instalar MarketPulse) |
+| **Safari Mac** | Archivo → Añadir al Dock |
+
+Requisitos: abrir la app por **HTTPS** o **localhost**. El service worker y el `manifest.webmanifest` ya están configurados (`display: standalone`, orientación libre para iPad y PC).
+
+## Datos reales
+
+| Dato | Fuente |
+|------|--------|
+| Precios EE.UU. | Finnhub |
+| Precios México | DataBursatil |
+| Internacional | Yahoo |
+| Dividendos US | FMP |
+| Dividendos MX | DataBursatil |
+
+## Ejecutar
 
 ```bash
+cd marketpulse
 npm install
 npm run dev
 ```
 
-## Despliegue en Vercel
+Abre http://localhost:3000
 
-1. Importa este repositorio en Vercel.
-2. Framework detectado automáticamente como **Next.js**.
-3. No requiere variables de entorno obligatorias; las API keys opcionales (`.env.example`) se pueden agregar en Project Settings → Environment Variables.
-4. Presiona Deploy.
+Para probar instalación en el móvil: misma Wi‑Fi y la IP `Network` que muestra Next.js (http://192.168.x.x:3000).
 
-## Scripts
 
-- `npm run dev` — Servidor de desarrollo.
-- `npm run build` — Build de producción (usado por Vercel).
-- `npm start` — Servidor de producción.
-- `npm run lint` — ESLint.
+## Publicar en internet (HTTPS)
 
-## Notas
+Guía completa: ver **[DEPLOY.md](./DEPLOY.md)**
 
-- Interacciones de botones y switches en `src/app/globals.css` (hover solo en puntero fino).
-- Caché local (`src/lib/local-cache.ts`) + Cache-Control en `/api/*`.
-- No hay base SQL: no se aplican índices relacionales. Ver `docs/DATOS_E_INDICES.md`.
-- Aviso de privacidad en `/legal/privacidad` (borrador LFPDPPP).
-- PWA lista con `public/manifest.webmanifest`, `public/sw.js` e iconos generados.
-- Proxy de rate limit y validación de origen en `src/proxy.ts` (convención actual de Next.js y compatible con Vercel).
+Resumen rápido con Vercel (gratis):
+1. Cuenta en https://vercel.com
+2. Sube el proyecto `marketpulse`
+3. Añade las variables de entorno (API keys)
+4. Usa la URL `https://….vercel.app` — el QR en `/install` apuntará a ella
+
+
+## Alpha Vantage (métricas)
+
+1. Key gratis: https://www.alphavantage.co/support/#api-key
+2. En `.env.local`:
+   ```
+   ALPHA_VANTAGE_API_KEY=tu_clave
+   ```
+3. Se usa en `/api/metrics` (OVERVIEW) con caché 24h. Free: ~25 llamadas/día.
+
+
+## Polygon (respaldo US)
+
+1. Key gratis: https://polygon.io/dashboard/signup (o Massive)
+2. `.env.local`: `POLYGON_API_KEY=tu_clave`
+3. Cadena cotizaciones US: **Finnhub → Polygon → Yahoo → mock**
+4. Free: ~5 req/min, datos con delay ~15 min
+
+
+## Finage
+
+1. Key: https://finage.co.uk (registro gratis)
+2. `.env.local`: `FINAGE_API_KEY=tu_clave`
+3. Cadena US: **Finnhub → Polygon → Finage → Yahoo**

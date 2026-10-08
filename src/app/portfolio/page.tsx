@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useQuotes } from "@/lib/market-data/client";
 import { loadPositions, savePositions, loadWatchlist, loadPrefs, savePrefs } from "@/lib/persist";
@@ -11,153 +12,791 @@ import { RebalanceSuggestions } from "@/components/RebalanceSuggestions";
 import { TaxEstimator } from "@/components/TaxEstimator";
 import { PortfolioBackup } from "@/components/PortfolioBackup";
 import { useToast } from "@/components/Toast";
-import { PortfolioPeriodChart } from "@/components/portfolio/PortfolioPeriodChart";
-import { ScrollableChips } from "@/components/ui/ScrollableChips";
-import { CollapsiblePanel } from "@/components/ui/CollapsiblePanel";
 
-type Position = { id: string; symbol: string; name: string; quantity: number; avgCost: number; region: "MX" | "US"; market: string; currency: "MXN" | "USD"; shares?: number };
+type Position = {
+  id: string;
+  symbol: string;
+  name: string;
+  quantity: number;
+  avgCost: number;
+  region: "MX" | "US";
+  market: string;
+  currency: "MXN" | "USD";
+};
+
+const initialPositions: Position[] = [];
+
 function formatMoney(value: number, currency: string) {
-  return new Intl.NumberFormat("es-MX", { style: "currency", currency: currency === "MXN" ? "MXN" : "USD" }).format(value);
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: currency === "MXN" ? "MXN" : "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
 }
-function formatPercent(value: number) { return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`; }
+
+function formatPercent(value: number) {
+  const sign = value >= 0 ? "+" : "";
+  return `${sign}${value.toFixed(2)}%`;
+}
+
 
 export default function PortfolioPage() {
   const toast = useToast();
   const [positions, setPositions] = useState<Position[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
-  const [formError, setFormError] = useState("");
   const [filter, setFilter] = useState<"ALL" | "MX" | "US">("ALL");
   const [displayCurrency, setDisplayCurrency] = useState<"USD" | "MXN">("MXN");
-  const { fx } = useUsdMxn();
-  const [form, setForm] = useState({ symbol: "", name: "", quantity: "", avgCost: "", region: "US" as "MX" | "US" });
+  const { fx, loading: fxLoading } = useUsdMxn();
+  const [chartRange, setChartRange] = useState("1s");
+  const [chartPoints, setChartPoints] = useState<Array<{ t: number; value: number }>>([]);
+  const [periodChange, setPeriodChange] = useState<number | null>(null);
+  const [periodChangePct, setPeriodChangePct] = useState<number | null>(null);
+  const [chartLoading, setChartLoading] = useState(false);
+  const [form, setForm] = useState({
+    symbol: "",
+    name: "",
+    quantity: "",
+    avgCost: "",
+    region: "US" as "MX" | "US",
+  });
+
+
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      const raw = loadPositions() as Array<Position & { shares?: number }>;
-      setPositions(raw.map((p) => ({ ...p, id: p.id || p.symbol, name: p.name || p.symbol, quantity: Number(p.quantity ?? p.shares ?? 0), avgCost: Number(p.avgCost ?? 0), region: p.region || (String(p.symbol).endsWith(".MX") ? "MX" : "US"), market: p.market || "", currency: p.currency || (String(p.symbol).endsWith(".MX") ? "MXN" : "USD") })));
-      const prefs = loadPrefs();
-      if (prefs.displayCurrency) setDisplayCurrency(prefs.displayCurrency);
-      setHydrated(true);
-    });
-    return () => window.cancelAnimationFrame(frame);
+    setPositions(loadPositions() as any);
+    const prefs = loadPrefs();
+    if (prefs.displayCurrency) setDisplayCurrency(prefs.displayCurrency);
+    setHydrated(true);
   }, []);
-  useEffect(() => { if (hydrated) savePositions(positions as never); }, [positions, hydrated]);
-  useEffect(() => { if (hydrated) savePrefs({ displayCurrency }); }, [displayCurrency, hydrated]);
-  const symbols = useMemo(() => positions.map((p) => p.symbol), [positions]);
-  const eventSymbols = useMemo(() => Array.from(new Set([...positions.map((p) => p.symbol.toUpperCase()), ...loadWatchlist().map((s) => s.toUpperCase())])), [positions]);
-  const { data, loading, error, refresh } = useQuotes(symbols, 45_000);
-  const quotesMap = useMemo(() => { const map = new Map<string, Quote>(); (data?.quotes ?? []).forEach((q) => map.set(q.symbol.toUpperCase(), q)); return map; }, [data]);
-  const usdMxn = fx?.usdMxn ?? 17;
-  const calculated = positions.map((p) => {
-    const live = quotesMap.get(p.symbol.toUpperCase());
-    const currentPrice = live?.price ?? p.avgCost;
-    const marketValue = p.quantity * currentPrice;
-    const costBasis = p.quantity * p.avgCost;
-    const pl = marketValue - costBasis;
-    return { ...p, name: live?.name || p.name, currentPrice, marketValue, costBasis, pl, plPercent: costBasis > 0 ? (pl / costBasis) * 100 : 0 };
+
+  useEffect(() => {
+    if (!hydrated) return;
+    savePositions(positions as any);
+  }, [positions, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    savePrefs({ displayCurrency });
+  }, [displayCurrency, hydrated]);
+
+  const symbols = useMemo(
+    () => positions.map((p) => p.symbol),
+    [positions]
+  );
+
+  const eventSymbols = useMemo(() => {
+    const wl = loadWatchlist();
+    const set = new Set<string>([
+      ...positions.map((p) => p.symbol.toUpperCase()),
+      ...wl.map((s) => s.toUpperCase()),
+    ]);
+    return Array.from(set);
+  }, [positions]);
+
+  const { data, loading, wsStatus, error, refresh } = useQuotes(symbols, 45_000);
+  const quotesMap = useMemo(() => {
+    const map = new Map<string, Quote>();
+    (data?.quotes ?? []).forEach((q) => map.set(q.symbol.toUpperCase(), q));
+    return map;
+  }, [data]);
+
+  const usingReal = data?.usingRealData ?? false;
+
+  const calculated = useMemo(() => {
+    return positions.map((p) => {
+      const live = quotesMap.get(p.symbol.toUpperCase());
+      const currentPrice = live?.price ?? p.avgCost; // fallback to cost if no quote
+      const marketValue = p.quantity * currentPrice;
+      const costBasis = p.quantity * p.avgCost;
+      const pl = marketValue - costBasis;
+      const plPercent = costBasis > 0 ? (pl / costBasis) * 100 : 0;
+      return {
+        ...p,
+        name: live?.name || p.name,
+        currentPrice,
+        marketValue,
+        costBasis,
+        pl,
+        plPercent,
+        hasLivePrice: Boolean(live),
+      };
+    });
+  }, [positions, quotesMap]);
+
+  const filtered = calculated.filter((p) => {
+    if (filter === "MX") return p.region === "MX";
+    if (filter === "US") return p.region === "US";
+    return true;
   });
-  const filtered = calculated.filter((p) => filter === "ALL" || p.region === filter);
-  let totalValue = 0, totalCost = 0, totalPL = 0;
-  calculated.forEach((p) => {
-    const cur = p.currency === "MXN" ? "MXN" : "USD";
-    totalValue += toDisplay(p.marketValue, cur, displayCurrency, usdMxn);
-    totalCost += toDisplay(p.costBasis, cur, displayCurrency, usdMxn);
-    totalPL += toDisplay(p.pl, cur, displayCurrency, usdMxn);
-  });
+
+  const usdMxn = fx?.usdMxn ?? 17.0;
+
+  const summary = useMemo(() => {
+    let totalValue = 0;
+    let totalCost = 0;
+    let totalPL = 0;
+
+    calculated.forEach((p) => {
+      const cur = (p.currency === "MXN" ? "MXN" : "USD") as "USD" | "MXN";
+      totalValue += toDisplay(p.marketValue, cur, displayCurrency, usdMxn);
+      totalCost += toDisplay(p.costBasis, cur, displayCurrency, usdMxn);
+      totalPL += toDisplay(p.pl, cur, displayCurrency, usdMxn);
+    });
+
+    const totalPLPercent =
+      totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
+
+    return {
+      totalValue,
+      totalCost,
+      totalPL,
+      totalPLPercent,
+      positionsCount: positions.length,
+    };
+  }, [calculated, positions.length, displayCurrency, usdMxn]);
+
+  const dayChange = useMemo(() => {
+    let d = 0;
+    calculated.forEach((p) => {
+      // approximate day change: changePercent of current value
+      const live = quotesMap.get(p.symbol.toUpperCase());
+      if (!live) return;
+      const cur = (p.currency === "MXN" ? "MXN" : "USD") as "USD" | "MXN";
+      const mv = toDisplay(p.marketValue, cur, displayCurrency, usdMxn);
+      const chgPct = live.changePercent ?? 0;
+      d += mv * (chgPct / 100);
+    });
+    return d;
+  }, [calculated, quotesMap, displayCurrency, usdMxn]);
+
+  const dayChangePct = useMemo(() => {
+    if (!summary.totalValue) return 0;
+    return (dayChange / summary.totalValue) * 100;
+  }, [dayChange, summary.totalValue]);
+
+
+  const removePosition = (id: string) => {
+    const pos = positions.find((x) => x.id === id);
+    setPositions((prev) => prev.filter((p) => p.id !== id));
+    toast(pos ? `Eliminado: ${pos.symbol}` : "Posición eliminada");
+  };
+
+  const handleAdd = () => {
+    if (!form.symbol.trim() || !form.quantity || !form.avgCost) return;
+
+    const newPos: Position = {
+      id: Date.now().toString(),
+      symbol: form.symbol.trim().toUpperCase(),
+      name: form.name.trim() || form.symbol.trim().toUpperCase(),
+      quantity: parseFloat(form.quantity),
+      avgCost: parseFloat(form.avgCost),
+      region: form.region,
+      market: form.region === "MX" ? "BMV" : "NASDAQ",
+      currency: form.region === "MX" ? "MXN" : "USD",
+    };
+
+    setPositions((prev) => [...prev, newPos]);
+    setForm({
+      symbol: "",
+      name: "",
+      quantity: "",
+      avgCost: "",
+      region: "US",
+    });
+    setShowAdd(false);
+    toast(`Posición añadida: ${form.symbol.trim().toUpperCase()}`);
+  };
+
+  useEffect(() => {
+    if (!positions.length) {
+      setChartPoints([]);
+      return;
+    }
+    let cancelled = false;
+    const load = async () => {
+      setChartLoading(true);
+      try {
+        const holdings = positions
+          .map((p) => `${p.symbol}:${p.quantity}`)
+          .join(",");
+        const res = await fetch(
+          `/api/portfolio-history?holdings=${encodeURIComponent(
+            holdings
+          )}&range=${chartRange}&display=${displayCurrency}`
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        setChartPoints(data.points || []);
+        setPeriodChange(
+          data.periodChange != null ? Number(data.periodChange) : null
+        );
+        setPeriodChangePct(
+          data.periodChangePercent != null
+            ? Number(data.periodChangePercent)
+            : null
+        );
+      } catch {
+        /* */
+      } finally {
+        if (!cancelled) setChartLoading(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [positions, chartRange, displayCurrency]);
+
   return (
     <div className="flex flex-col min-h-full">
-      <header className="sticky top-0 z-40 bg-background/95 border-b border-border safe-top">
+      {/* Header */}
+      <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-md border-b border-border safe-top">
         <div className="flex items-center justify-between px-4 h-14 max-w-lg mx-auto">
-          <h1 className="text-lg font-bold">Cartera</h1>
-          <LiveBadge live={!!data?.usingRealData} />
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-bold">Mi Cartera</h1>
+            {usingReal && (
+              <span className="text-[10px] font-medium bg-success/15 text-success px-2 py-0.5 rounded-full">
+                EN VIVO
+              </span>
+            )}
+            <LiveBadge status={wsStatus} />
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                setDisplayCurrency((c) => (c === "MXN" ? "USD" : "MXN"))
+              }
+              className="text-xs font-medium px-2.5 py-1.5 rounded-lg border border-border"
+              title="Cambiar moneda de visualización"
+            >
+              {displayCurrency}
+            </button>
+            <Link
+              href="/portfolio/analysis"
+              className="text-xs font-medium text-primary px-2.5 py-1.5 rounded-lg border border-border"
+            >
+              Análisis
+            </Link>
+            <button
+              onClick={() => refresh()}
+              className="w-9 h-9 rounded-full border border-border flex items-center justify-center text-muted text-sm active:scale-95"
+              aria-label="Actualizar"
+            >
+              ↻
+            </button>
+            <button
+              onClick={() => setShowAdd(true)}
+              className="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xl font-medium active:scale-95 transition-transform"
+              aria-label="Añadir posición"
+            >
+              +
+            </button>
+          </div>
         </div>
       </header>
-      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-3">
-        <p className="text-2xl font-bold">{formatMoney(totalValue, displayCurrency)}</p>
-        <p className={totalPL >= 0 ? "text-success text-sm" : "text-danger text-sm"}>{formatMoney(totalPL, displayCurrency)} ({formatPercent(totalCost ? (totalPL / totalCost) * 100 : 0)})</p>
-        <PortfolioPeriodChart holdings={positions.map((p) => ({ symbol: p.symbol, quantity: p.quantity }))} displayCurrency={displayCurrency} />
-        <ScrollableChips
-          label="Filtrar posiciones por mercado"
-          options={[
-            { value: "ALL" as const, label: "Todas" },
-            { value: "MX" as const, label: "México" },
-            { value: "US" as const, label: "EE.UU." },
-          ]}
-          value={filter}
-          onChange={setFilter}
-        />
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            className={`ui-chip${displayCurrency === "USD" ? " ui-chip-active" : ""}`}
-            aria-label={`Moneda de visualización ${displayCurrency}; cambiar a ${displayCurrency === "MXN" ? "USD" : "MXN"}`}
-            aria-pressed={displayCurrency === "USD"}
-            onClick={() => setDisplayCurrency(displayCurrency === "MXN" ? "USD" : "MXN")}
+
+      <main className="flex-1 max-w-lg mx-auto w-full">
+                {/* Resumen estilo Portafolio */}
+        <section className="px-4 pt-5 pb-2">
+          <p className="text-[11px] text-muted uppercase tracking-wider text-center mb-1">
+            Valor de mercado
+          </p>
+          <p className="text-3xl font-bold tracking-tight text-center">
+            {loading
+              ? "…"
+              : formatMoney(summary.totalValue, displayCurrency)}
+          </p>
+          <p
+            className={`text-center text-sm font-medium mt-1.5 ${
+              dayChange >= 0 ? "text-success" : "text-danger"
+            }`}
           >
-            {displayCurrency}
-          </button>
-          <button type="button" className="ui-btn ui-btn-secondary" disabled={loading} aria-busy={loading} onClick={() => void refresh()}>
-            {loading ? "Actualizando…" : "Actualizar"}
-          </button>
-          <Link href="/portfolio/analysis" className="ui-chip">Análisis</Link>
-        </div>
-        {error ? <p className="text-danger text-xs" role="alert">{error}</p> : null}
-        {filtered.map((p) => (
-          <div key={p.id} className="bg-card border border-border rounded-xl p-3">
-            <div className="flex justify-between"><Link href={`/asset/${encodeURIComponent(p.symbol)}`} className="ui-text-action font-semibold">{p.symbol}</Link><span>{formatMoney(toDisplay(p.marketValue, p.currency, displayCurrency, usdMxn), displayCurrency)}</span></div>
-            <p className="text-xs text-muted">{p.quantity} × {p.currentPrice.toFixed(2)} · P/L {formatPercent(p.plPercent)}</p>
-            <button type="button" className="ui-text-action text-danger text-xs" onClick={() => { setPositions((xs) => xs.filter((x) => x.id !== p.id)); toast.push("Posición eliminada"); }}>Quitar</button>
+            {dayChange >= 0 ? "↑" : "↓"}
+            {formatMoney(Math.abs(dayChange), displayCurrency)}{" "}
+            {formatPercent(dayChangePct)}
+            <span className="text-muted font-normal text-xs"> hoy</span>
+          </p>
+          <p className="text-center text-sm mt-1">
+            <span className="text-muted">P/G abierto </span>
+            <span
+              className={`font-semibold ${
+                summary.totalPL >= 0 ? "text-success" : "text-danger"
+              }`}
+            >
+              {summary.totalPL >= 0 ? "↑" : "↓"}
+              {formatMoney(Math.abs(summary.totalPL), displayCurrency)}{" "}
+              {formatPercent(summary.totalPLPercent)}
+            </span>
+          </p>
+
+          {/* Gráfico histórico del portafolio */}
+          <div className="mt-4 h-40 relative">
+            {chartLoading && (
+              <p className="absolute inset-0 flex items-center justify-center text-xs text-muted">
+                Cargando gráfico…
+              </p>
+            )}
+            {!chartLoading && chartPoints.length > 1 && (
+              <svg
+                viewBox="0 0 320 120"
+                className="w-full h-full"
+                preserveAspectRatio="none"
+              >
+                {(() => {
+                  const vals = chartPoints.map((p) => p.value);
+                  const min = Math.min(...vals);
+                  const max = Math.max(...vals);
+                  const span = max - min || 1;
+                  const up =
+                    (periodChange ?? 0) >= 0 ||
+                    vals[vals.length - 1] >= vals[0];
+                  const color = up ? "#22c55e" : "#ef4444";
+                  const pts = chartPoints
+                    .map((p, i) => {
+                      const x =
+                        (i / (chartPoints.length - 1)) * 320;
+                      const y = 110 - ((p.value - min) / span) * 100;
+                      return `${x},${y}`;
+                    })
+                    .join(" ");
+                  const area =
+                    `0,120 ` +
+                    chartPoints
+                      .map((p, i) => {
+                        const x =
+                          (i / (chartPoints.length - 1)) * 320;
+                        const y = 110 - ((p.value - min) / span) * 100;
+                        return `${x},${y}`;
+                      })
+                      .join(" ") +
+                    ` 320,120`;
+                  return (
+                    <>
+                      <defs>
+                        <linearGradient
+                          id="pg"
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1"
+                        >
+                          <stop
+                            offset="0%"
+                            stopColor={color}
+                            stopOpacity="0.25"
+                          />
+                          <stop
+                            offset="100%"
+                            stopColor={color}
+                            stopOpacity="0"
+                          />
+                        </linearGradient>
+                      </defs>
+                      <polygon fill="url(#pg)" points={area} />
+                      <polyline
+                        fill="none"
+                        stroke={color}
+                        strokeWidth="2"
+                        points={pts}
+                      />
+                    </>
+                  );
+                })()}
+              </svg>
+            )}
+            {!chartLoading && chartPoints.length <= 1 && (
+              <p className="text-xs text-muted text-center pt-12">
+                Sin histórico para el rango
+              </p>
+            )}
           </div>
-        ))}
-        <button
-          id="add-position-toggle"
-          type="button"
-          className="ui-btn ui-btn-primary w-full"
-          aria-expanded={showAdd}
-          aria-controls="add-position-panel"
-          onClick={() => { setFormError(""); setShowAdd((v) => !v); }}
-        >
-          {showAdd ? "Cerrar" : "Agregar posición"}
-        </button>
-        <CollapsiblePanel id="add-position-panel" labelledBy="add-position-toggle" open={showAdd}>
-          <form className="space-y-2" onSubmit={(e) => {
-            e.preventDefault();
-            const symbol = form.symbol.trim().toUpperCase();
-            const quantity = Number(form.quantity); const avgCost = Number(form.avgCost);
-            if (!symbol || !(quantity > 0) || !(avgCost >= 0)) {
-              setFormError("Escribe un ticker, una cantidad mayor que cero y un costo válido.");
-              return;
-            }
-            setPositions((xs) => [...xs, { id: `${symbol}-${Date.now()}`, symbol, name: form.name || symbol, quantity, avgCost, region: form.region, market: form.region === "MX" ? "BMV" : "US", currency: form.region === "MX" ? "MXN" : "USD" }]);
-            setForm({ symbol: "", name: "", quantity: "", avgCost: "", region: "US" });
-            setFormError("");
-            setShowAdd(false);
-            toast.push("Posición guardada");
-          }}>
-            <label className="block space-y-1 text-xs font-medium" htmlFor="position-symbol">Ticker
-              <input id="position-symbol" className="ui-input" autoCapitalize="characters" value={form.symbol} onChange={(e) => { setFormError(""); setForm({ ...form, symbol: e.target.value }); }} required />
-            </label>
-            <label className="block space-y-1 text-xs font-medium" htmlFor="position-name">Nombre (opcional)
-              <input id="position-name" className="ui-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            </label>
-            <label className="block space-y-1 text-xs font-medium" htmlFor="position-quantity">Títulos
-              <input id="position-quantity" className="ui-input" type="number" min="0.000001" step="any" inputMode="decimal" value={form.quantity} onChange={(e) => { setFormError(""); setForm({ ...form, quantity: e.target.value }); }} required />
-            </label>
-            <label className="block space-y-1 text-xs font-medium" htmlFor="position-cost">Costo promedio
-              <input id="position-cost" className="ui-input" type="number" min="0" step="any" inputMode="decimal" value={form.avgCost} onChange={(e) => { setFormError(""); setForm({ ...form, avgCost: e.target.value }); }} required />
-            </label>
-            <ScrollableChips
-              label="Mercado de la posición"
-              options={[{ value: "US" as const, label: "EE.UU." }, { value: "MX" as const, label: "México" }]}
-              value={form.region}
-              onChange={(region) => setForm({ ...form, region })}
-            />
-            {formError ? <p className="text-sm text-danger" role="alert">{formError}</p> : null}
-            <button type="submit" className="ui-btn ui-btn-primary w-full">Guardar posición</button>
-          </form>
-        </CollapsiblePanel>
-        <PortfolioEvents symbols={eventSymbols} /><RebalanceSuggestions /><TaxEstimator /><PortfolioBackup />
+
+          {periodChange != null && periodChangePct != null && (
+            <p
+              className={`text-center text-xs mb-2 ${
+                periodChange >= 0 ? "text-success" : "text-danger"
+              }`}
+            >
+              Periodo: {periodChange >= 0 ? "+" : ""}
+              {formatMoney(periodChange, displayCurrency)} (
+              {formatPercent(periodChangePct)})
+            </p>
+          )}
+
+          <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1 justify-center">
+            {(
+              [
+                ["1d", "Día"],
+                ["1s", "Sem."],
+                ["1m", "Mes"],
+                ["3m", "3M"],
+                ["ytd", "YTD"],
+                ["1y", "1A"],
+                ["5y", "5A"],
+              ] as const
+            ).map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setChartRange(k)}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-medium shrink-0 ${
+                  chartRange === k
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-muted"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <p className="text-[10px] text-muted text-center mt-2">
+            {summary.positionsCount} posiciones · TC 1 USD ={" "}
+            {fxLoading ? "…" : usdMxn.toFixed(2)} MXN · precios en vivo
+          </p>
+          <p className="text-[10px] text-center mt-1 text-muted">
+            Vista unificada en{" "}
+            <span className="font-semibold text-foreground">{displayCurrency}</span>
+            {displayCurrency !== "MXN" ? " · cambia a MXN para ver todo en pesos" : " (pesos mexicanos)"}
+          </p>
+        </section>
+
+        {/* Eventos de la cartera */}
+        <div className="px-4 pb-3 space-y-3">
+          <PortfolioEvents
+            symbols={eventSymbols}
+            limit={10}
+            title="¿Qué cobro pronto?"
+            defaultFilter="dividend"
+          />
+          <RebalanceSuggestions
+            positions={calculated.map((p) => ({
+              symbol: p.symbol,
+              name: p.name,
+              marketValue: toDisplay(
+                p.marketValue,
+                (p.currency === "MXN" ? "MXN" : "USD") as "USD" | "MXN",
+                displayCurrency,
+                usdMxn
+              ),
+              region: p.region,
+              currency: p.currency,
+            }))}
+            displayCurrency={displayCurrency}
+          />
+          <TaxEstimator
+            holdings={positions.map((p) => ({
+              symbol: p.symbol,
+              region: p.region,
+            }))}
+          />
+          <PortfolioBackup />
+        </div>
+
+        {/* Filtros */}
+        <div className="px-4 pb-3 flex items-center gap-2">
+          {[
+            { key: "ALL", label: "Todas" },
+            { key: "MX", label: "🇲🇽 México" },
+            { key: "US", label: "🇺🇸 EE.UU." },
+          ].map((f) => (
+            <button
+              key={f.key}
+              onClick={() => setFilter(f.key as "ALL" | "MX" | "US")}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                filter === f.key
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-card border border-border text-muted"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Lista */}
+        <div className="px-4 pb-8">
+          {filtered.length === 0 ? (
+            <div className="text-center py-12 px-4">
+              <p className="text-4xl mb-3">💼</p>
+              <p className="font-medium mb-1">Tu cartera está vacía</p>
+              <p className="text-sm text-muted mb-5">
+                Añade acciones, ETFS o FIBRAs que ya tengas para ver valor y peso en pesos
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowAdd(true)}
+                className="min-h-[48px] px-6 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold"
+              >
+                Añadir primera posición
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filtered.map((pos) => (
+                <div
+                  key={pos.id}
+                  className="bg-card rounded-xl border border-border p-4"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className={`w-10 h-10 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                          pos.region === "MX"
+                            ? "bg-green-500/15 text-green-600 dark:text-green-400"
+                            : "bg-blue-500/15 text-blue-600 dark:text-blue-400"
+                        }`}
+                      >
+                        {pos.region}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-semibold text-sm">{pos.symbol}</p>
+                          <span className="text-[10px] text-muted bg-secondary px-1.5 py-0.5 rounded">
+                            {pos.market}
+                          </span>
+                          {pos.hasLivePrice && (
+                            <span className="text-[9px] text-success">●</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted truncate">{pos.name}</p>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => removePosition(pos.id)}
+                      className="text-muted hover:text-danger text-sm w-7 h-7 flex items-center justify-center flex-shrink-0"
+                      aria-label="Eliminar"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-y-2 gap-x-4 text-sm">
+                    <div>
+                      <p className="text-xs text-muted">Cantidad</p>
+                      <p className="font-medium">{pos.quantity}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-muted">Precio actual</p>
+                      <p className="font-medium">
+                        {formatMoney(pos.currentPrice, pos.currency)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted">Costo promedio</p>
+                      <p className="font-medium">
+                        {formatMoney(pos.avgCost, pos.currency)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-muted">Valor de mercado</p>
+                      <p className="font-medium">
+                        {formatMoney(pos.marketValue, pos.currency)}
+                      </p>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-xs text-muted mb-1">
+                        Peso en cartera
+                        {summary.totalValue > 0 && (
+                          <span className="font-medium text-foreground ml-1">
+                            {(
+                              (toDisplay(
+                                pos.marketValue,
+                                (pos.currency === "MXN" ? "MXN" : "USD") as
+                                  | "USD"
+                                  | "MXN",
+                                displayCurrency,
+                                usdMxn
+                              ) /
+                                summary.totalValue) *
+                              100
+                            ).toFixed(1)}
+                            %
+                          </span>
+                        )}
+                      </p>
+                      <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-primary/80"
+                          style={{
+                            width: `${
+                              summary.totalValue > 0
+                                ? Math.min(
+                                    100,
+                                    (toDisplay(
+                                      pos.marketValue,
+                                      (pos.currency === "MXN"
+                                        ? "MXN"
+                                        : "USD") as "USD" | "MXN",
+                                      displayCurrency,
+                                      usdMxn
+                                    ) /
+                                      summary.totalValue) *
+                                      100
+                                  )
+                                : 0
+                            }%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
+                    <span className="text-xs text-muted">Ganancia / Pérdida</span>
+                    <div className="text-right">
+                      <p
+                        className={`font-semibold text-sm ${
+                          pos.pl >= 0 ? "text-success" : "text-danger"
+                        }`}
+                      >
+                        {pos.pl >= 0 ? "+" : ""}
+                        {formatMoney(pos.pl, pos.currency)}
+                      </p>
+                      <p
+                        className={`text-xs font-medium ${
+                          pos.plPercent >= 0 ? "text-success" : "text-danger"
+                        }`}
+                      >
+                        {formatPercent(pos.plPercent)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </main>
+
+      {/* Modal añadir */}
+      {showAdd && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowAdd(false)}
+          />
+          <div className="relative bg-card rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col safe-bottom">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <h2 className="font-semibold">Añadir posición</h2>
+              <button
+                onClick={() => setShowAdd(false)}
+                className="text-muted text-xl w-8 h-8 flex items-center justify-center"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 p-4 space-y-4">
+              <div>
+                <label className="text-xs font-medium text-muted mb-1.5 block">
+                  Mercado
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, region: "US" }))}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-colors ${
+                      form.region === "US"
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-card border-border text-muted"
+                    }`}
+                  >
+                    🇺🇸 EE.UU.
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, region: "MX" }))}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-colors ${
+                      form.region === "MX"
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-card border-border text-muted"
+                    }`}
+                  >
+                    🇲🇽 México
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted mb-1.5 block">
+                  Símbolo *
+                </label>
+                <input
+                  type="text"
+                  placeholder={form.region === "MX" ? "Ej. AMXL.MX" : "Ej. AAPL"}
+                  value={form.symbol}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, symbol: e.target.value }))
+                  }
+                  className="w-full bg-background border border-border rounded-xl py-2.5 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted mb-1.5 block">
+                  Nombre (opcional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej. Apple Inc."
+                  value={form.name}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, name: e.target.value }))
+                  }
+                  className="w-full bg-background border border-border rounded-xl py-2.5 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted mb-1.5 block">
+                    Cantidad *
+                  </label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={form.quantity}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, quantity: e.target.value }))
+                    }
+                    className="w-full bg-background border border-border rounded-xl py-2.5 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted mb-1.5 block">
+                    Costo promedio *
+                  </label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    value={form.avgCost}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, avgCost: e.target.value }))
+                    }
+                    className="w-full bg-background border border-border rounded-xl py-2.5 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-border">
+              <button
+                onClick={handleAdd}
+                className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm active:scale-[0.98] transition-transform"
+              >
+                Añadir a la cartera
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
