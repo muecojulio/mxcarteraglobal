@@ -1,25 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 
 const KEY = "mxcg_legal_banner_v1";
+
+const noSubscribe = () => () => {};
+
+/** ¿El usuario ya aceptó el aviso? Fuera del navegador aún no consta. */
+function readAccepted(): boolean {
+  try {
+    return localStorage.getItem(KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Aviso legal visible y claro: no asesoría, no casa de bolsa, datos orientativos.
  */
 export default function LegalBanner() {
-  const [open, setOpen] = useState(false);
+  // useSyncExternalStore lee localStorage durante el render. Antes se hacía con
+  // useState + useEffect + setState, que es lo que marcaba la regla.
+  // getServerSnapshot = false: en el SSR no se pinta el banner.
+  const accepted = useSyncExternalStore(noSubscribe, readAccepted, () => false);
+  const [dismissed, setDismissed] = useState(false);
 
-  useEffect(() => {
-    try {
-      if (localStorage.getItem(KEY) !== "1") setOpen(true);
-    } catch {
-      setOpen(true);
-    }
-  }, []);
-
-  if (!open) return null;
+  if (accepted || dismissed) return null;
 
   return (
     <div
@@ -63,7 +70,7 @@ export default function LegalBanner() {
               } catch {
                 /* */
               }
-              setOpen(false);
+              setDismissed(true);
             }}
           >
             Entendido

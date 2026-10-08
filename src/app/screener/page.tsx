@@ -42,53 +42,67 @@ export default function ScreenerPage() {
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [results, setResults] = useState<Row[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [source, setSource] = useState("");
+  // `loading`/`error` derivados de qué petición terminó (ver calendar).
+  const [settled, setSettled] = useState<{ key: string; error: string | null } | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams({
-        preset: "losers",
-        region,
-      });
-      // Filtros de precio se capturan en MXN; para US se envía equivalente USD
-      const rate = usdMxn && usdMxn > 0 ? usdMxn : 17.5;
-      if (minPrice) {
-        const n = Number(minPrice);
-        if (Number.isFinite(n)) {
-          params.set("minPrice", String(region === "MX" ? n : n / rate));
-        }
-      }
-      if (maxPrice) {
-        const n = Number(maxPrice);
-        if (Number.isFinite(n)) {
-          params.set("maxPrice", String(region === "MX" ? n : n / rate));
-        }
-      }
+  const requestKey = `${region}|${minPrice}|${maxPrice}|${usdMxn}|${reloadNonce}`;
+  const isCurrent = settled?.key === requestKey;
+  const loading = !isCurrent;
+  const error = isCurrent ? settled?.error ?? null : null;
 
-      const res = await fetch(`/api/screener?${params}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const rows = (data.results || []).filter(
-        (r: Row) => r.changePercent < 0
-      );
-      setResults(rows);
-      setSource(data.source || "");
-      if (data.error) setError(data.error);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error");
-      setResults([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [region, minPrice, maxPrice, usdMxn]);
+  const load = useCallback(() => setReloadNonce((n) => n + 1), []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const params = new URLSearchParams({
+          preset: "losers",
+          region,
+        });
+        // Filtros de precio se capturan en MXN; para US se envía equivalente USD
+        const rate = usdMxn && usdMxn > 0 ? usdMxn : 17.5;
+        if (minPrice) {
+          const n = Number(minPrice);
+          if (Number.isFinite(n)) {
+            params.set("minPrice", String(region === "MX" ? n : n / rate));
+          }
+        }
+        if (maxPrice) {
+          const n = Number(maxPrice);
+          if (Number.isFinite(n)) {
+            params.set("maxPrice", String(region === "MX" ? n : n / rate));
+          }
+        }
+
+        const res = await fetch(`/api/screener?${params}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+        const rows = (data.results || []).filter(
+          (r: Row) => r.changePercent < 0
+        );
+        setResults(rows);
+        setSource(data.source || "");
+        setSettled({
+          key: requestKey,
+          error: typeof data.error === "string" ? data.error : null,
+        });
+      } catch (err) {
+        if (cancelled) return;
+        setResults([]);
+        setSettled({
+          key: requestKey,
+          error: err instanceof Error ? err.message : "Error",
+        });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [region, minPrice, maxPrice, usdMxn, requestKey]);
 
   return (
     <div className="flex flex-col min-h-full">

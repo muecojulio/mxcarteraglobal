@@ -94,35 +94,49 @@ export default function IpoPage() {
   );
   const [search, setSearch] = useState("");
   const [ipos, setIpos] = useState<IpoItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [usingReal, setUsingReal] = useState(false);
+  // `loading`/`error` derivados de qué petición terminó (ver calendar).
+  const [settled, setSettled] = useState<{ key: string; error: string | null } | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const q =
-        status === "all"
-          ? "/api/ipo"
-          : `/api/ipo?status=${status}`;
-      const res = await fetch(q);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setIpos(data.ipos || []);
-      setUsingReal(Boolean(data.usingRealData));
-      if (data.error) setError(data.error);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error");
-      setIpos([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [status]);
+  const requestKey = `${status}|${reloadNonce}`;
+  const isCurrent = settled?.key === requestKey;
+  const loading = !isCurrent;
+  const error = isCurrent ? settled?.error ?? null : null;
+
+  const load = useCallback(() => setReloadNonce((n) => n + 1), []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const q =
+          status === "all"
+            ? "/api/ipo"
+            : `/api/ipo?status=${status}`;
+        const res = await fetch(q);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+        setIpos(data.ipos || []);
+        setUsingReal(Boolean(data.usingRealData));
+        setSettled({
+          key: requestKey,
+          error: typeof data.error === "string" ? data.error : null,
+        });
+      } catch (err) {
+        if (cancelled) return;
+        setIpos([]);
+        setSettled({
+          key: requestKey,
+          error: err instanceof Error ? err.message : "Error",
+        });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [status, requestKey]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return ipos;

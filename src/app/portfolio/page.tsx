@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useQuotes } from "@/lib/market-data/client";
-import { loadPositions, savePositions, loadWatchlist, loadPrefs, savePrefs } from "@/lib/persist";
+import { loadPositions, savePositions, loadWatchlist, loadPrefs, savePrefs, type Position } from "@/lib/persist";
 import { LiveBadge } from "@/components/LiveBadge";
 import type { Quote } from "@/lib/market-data/types";
 import { useUsdMxn, toDisplay } from "@/lib/fx";
@@ -12,17 +12,6 @@ import { RebalanceSuggestions } from "@/components/RebalanceSuggestions";
 import { TaxEstimator } from "@/components/TaxEstimator";
 import { PortfolioBackup } from "@/components/PortfolioBackup";
 import { useToast } from "@/components/Toast";
-
-type Position = {
-  id: string;
-  symbol: string;
-  name: string;
-  quantity: number;
-  avgCost: number;
-  region: "MX" | "US";
-  market: string;
-  currency: "MXN" | "USD";
-};
 
 const initialPositions: Position[] = [];
 
@@ -64,7 +53,7 @@ export default function PortfolioPage() {
 
 
   useEffect(() => {
-    setPositions(loadPositions() as any);
+    setPositions(loadPositions());
     const prefs = loadPrefs();
     if (prefs.displayCurrency) setDisplayCurrency(prefs.displayCurrency);
     setHydrated(true);
@@ -72,7 +61,7 @@ export default function PortfolioPage() {
 
   useEffect(() => {
     if (!hydrated) return;
-    savePositions(positions as any);
+    savePositions(positions);
   }, [positions, hydrated]);
 
   useEffect(() => {

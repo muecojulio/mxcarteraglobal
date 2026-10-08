@@ -97,29 +97,38 @@ function Donut({
   const total = slices.reduce((s, x) => s + x.value, 0) || 1;
   const r = 42;
   const c = 2 * Math.PI * r;
-  let offset = 0;
+  // Desplazamiento acumulado calculado antes de pintar, sin mutar nada dentro
+  // del map (que es lo que marcaba react-hooks/immutability).
+  const arcs = slices.reduce<Array<{ label: string; color: string; dash: number; offset: number }>>(
+    (acc, sl) => {
+      const dash = (sl.value / total) * c;
+      const prev = acc[acc.length - 1];
+      acc.push({
+        label: sl.label,
+        color: sl.color,
+        dash,
+        offset: prev ? prev.offset + prev.dash : 0,
+      });
+      return acc;
+    },
+    []
+  );
   return (
     <div className="relative w-48 h-48 mx-auto">
       <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
-        {slices.map((sl) => {
-          const pct = sl.value / total;
-          const dash = pct * c;
-          const el = (
-            <circle
-              key={sl.label}
-              cx="50"
-              cy="50"
-              r={r}
-              fill="none"
-              stroke={sl.color}
-              strokeWidth="12"
-              strokeDasharray={`${dash} ${c - dash}`}
-              strokeDashoffset={-offset}
-            />
-          );
-          offset += dash;
-          return el;
-        })}
+        {arcs.map((arc) => (
+          <circle
+            key={arc.label}
+            cx="50"
+            cy="50"
+            r={r}
+            fill="none"
+            stroke={arc.color}
+            strokeWidth="12"
+            strokeDasharray={`${arc.dash} ${c - arc.dash}`}
+            strokeDashoffset={-arc.offset}
+          />
+        ))}
         <circle cx="50" cy="50" r="30" className="fill-[var(--card)]" />
       </svg>
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">

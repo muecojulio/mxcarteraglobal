@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
+import { useHydratedValue } from "@/lib/use-hydrated-value";
+
+/** Identidad constante: origen y plataforma no cambian tras montar. */
+const BROWSER_ID = () => "browser";
 
 type Platform = "ios" | "android" | "desktop" | "other";
 
@@ -18,14 +22,16 @@ function detectPlatform(): Platform {
 }
 
 export default function InstallPage() {
-  const [url, setUrl] = useState("");
-  const [platform, setPlatform] = useState<Platform>("other");
+  // Origen y plataforma se leen durante el render. La identidad es constante
+  // porque ninguno de los dos cambia después de montar, así que se computan una
+  // sola vez. En el SSR se usa el valor por defecto.
+  const url = useHydratedValue(BROWSER_ID, () => window.location.origin, "");
+  const platform = useHydratedValue<Platform>(
+    BROWSER_ID,
+    detectPlatform,
+    "other"
+  );
   const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    setUrl(window.location.origin);
-    setPlatform(detectPlatform());
-  }, []);
 
   const qrSrc = useMemo(() => {
     if (!url) return "";

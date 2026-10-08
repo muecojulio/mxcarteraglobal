@@ -1,5 +1,6 @@
 "use client";
 import { loadPositions } from "@/lib/persist";
+import { useHydratedValue, localStorageIdentity } from "@/lib/use-hydrated-value";
 
 import { PortfolioEvents } from "@/components/PortfolioEvents";
 
@@ -70,24 +71,20 @@ const TYPE_META: Record<
   },
 };
 
+const EMPTY_SYMBOLS: string[] = [];
+
 export default function CalendarPage() {
-  const [holdingSymbols, setHoldingSymbols] = useState<string[]>([]);
+  // Símbolos en cartera, leídos durante el render. El JSON.parse(JSON.stringify())
+  // de antes era un ida-y-vuelta innecesario sobre loadPositions().
+  const holdingSymbols = useHydratedValue<string[]>(
+    localStorageIdentity("marketpulse_positions"),
+    () =>
+      loadPositions()
+        .map((p) => p.symbol)
+        .filter((s): s is string => Boolean(s)),
+    EMPTY_SYMBOLS
+  );
   const [onlyHoldings, setOnlyHoldings] = useState(true);
-  useEffect(() => {
-    try {
-      const raw = JSON.stringify(loadPositions());
-      if (raw) {
-        const arr = JSON.parse(raw);
-        if (Array.isArray(arr)) {
-          setHoldingSymbols(
-            arr
-              .map((p: { symbol?: string }) => p.symbol)
-              .filter((s): s is string => Boolean(s))
-          );
-        }
-      }
-    } catch { /* */ }
-  }, []);
 
   const [from] = useState(todayISO());
   const [to] = useState(addDays(todayISO(), 21));
@@ -97,32 +94,46 @@ export default function CalendarPage() {
   const [region, setRegion] = useState<"ALL" | "US" | "MX">("ALL");
   const [search, setSearch] = useState("");
   const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [sources, setSources] = useState<string[]>([]);
+  // `loading` y `error` se derivan de qué petición terminó, en lugar de
+  // setearse de forma síncrona dentro del effect (lo que marcaba la regla).
+  const [settled, setSettled] = useState<{ key: string; error: string | null } | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(
-        `/api/calendar?from=${from}&to=${to}&type=${filter === "all" ? "all" : filter}`
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setEvents(data.events || []);
-      setSources(data.sources || []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error");
-      setEvents([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [from, to, filter]);
+  const requestKey = `${from}|${to}|${filter}|${reloadNonce}`;
+  const isCurrent = settled?.key === requestKey;
+  const loading = !isCurrent;
+  const error = isCurrent ? settled?.error ?? null : null;
+
+  // Reintento: solo cambia la clave de petición; el effect de abajo reacciona.
+  const load = useCallback(() => setReloadNonce((n) => n + 1), []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/calendar?from=${from}&to=${to}&type=${filter === "all" ? "all" : filter}`
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+        setEvents(data.events || []);
+        setSources(data.sources || []);
+        setSettled({ key: requestKey, error: null });
+      } catch (err) {
+        if (cancelled) return;
+        setEvents([]);
+        setSettled({
+          key: requestKey,
+          error: err instanceof Error ? err.message : "Error",
+        });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [from, to, filter, requestKey]);
 
   const filtered = useMemo(() => {
     return events.filter((e) => {
