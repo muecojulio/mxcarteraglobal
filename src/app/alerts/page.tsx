@@ -94,10 +94,13 @@ export default function AlertsPage() {
     saveAlertsStore(alerts);
   }, [alerts, ready]);
 
-  const persist = useCallback((next: PriceAlert[]) => {
-    setAlerts(next);
-    saveAlertsStore(next);
-  }, []);
+  const persist = useCallback(
+    (next: PriceAlert[]) => {
+      setAlerts(next);
+      saveAlertsStore(next);
+    },
+    [setAlerts]
+  );
 
   const addAlert = () => {
     const symbol = form.symbol.trim().toUpperCase();
