@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useHydratedValue, localStorageIdentity } from "@/lib/use-hydrated-value";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -33,24 +34,34 @@ function isInStandaloneMode() {
   );
 }
 
+/** Identidad constante: la plataforma no cambia tras montar. */
+const BROWSER_ID = () => "browser";
+
 export default function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
-  const [showGuide, setShowGuide] = useState(false);
-  const [platform, setPlatform] = useState<Platform>("other");
-  const [dismissed, setDismissed] = useState(false);
+  const [guideTimerFired, setGuideTimerFired] = useState(false);
+  const [userDismissed, setUserDismissed] = useState(false);
+
+  // Plataforma y "ya descartado" se leen durante el render (antes: setState
+  // síncrono dentro del effect).
+  const platform = useHydratedValue<Platform>(BROWSER_ID, detectPlatform, "other");
+  const storedDismissed = useHydratedValue(
+    localStorageIdentity("mp-install-dismissed"),
+    () => localStorage.getItem("mp-install-dismissed") === "1",
+    false
+  );
+  const dismissed = storedDismissed || userDismissed;
+
+  // Si llegó el prompt nativo tiene preferencia sobre la guía genérica. Antes
+  // esto era un segundo effect con setShowGuide(false); ahora se deriva.
+  const showGuide = guideTimerFired && !deferredPrompt;
 
   useEffect(() => {
     if (isInStandaloneMode()) return;
-
-    const wasDismissed = localStorage.getItem("mp-install-dismissed");
-    if (wasDismissed) {
-      setDismissed(true);
-      return;
-    }
+    if (storedDismissed) return;
 
     const p = detectPlatform();
-    setPlatform(p);
 
     // Chrome/Edge/Android: native install event
     const handler = (e: Event) => {
@@ -61,7 +72,7 @@ export default function InstallPrompt() {
 
     // iOS / iPadOS: no beforeinstallprompt — show Safari guide
     if (p === "ios") {
-      const t = setTimeout(() => setShowGuide(true), 2000);
+      const t = setTimeout(() => setGuideTimerFired(true), 2000);
       return () => {
         clearTimeout(t);
         window.removeEventListener("beforeinstallprompt", handler);
@@ -70,10 +81,7 @@ export default function InstallPrompt() {
 
     // Desktop without event yet: still show manual tip after delay
     if (p === "desktop") {
-      const t = setTimeout(() => {
-        // Only if browser didn't offer native prompt
-        setShowGuide(true);
-      }, 4000);
+      const t = setTimeout(() => setGuideTimerFired(true), 4000);
       return () => {
         clearTimeout(t);
         window.removeEventListener("beforeinstallprompt", handler);
@@ -81,12 +89,7 @@ export default function InstallPrompt() {
     }
 
     return () => window.removeEventListener("beforeinstallprompt", handler);
-  }, []);
-
-  // If native prompt arrived, prefer it over generic guide on desktop/android
-  useEffect(() => {
-    if (deferredPrompt) setShowGuide(false);
-  }, [deferredPrompt]);
+  }, [storedDismissed]);
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
@@ -98,10 +101,13 @@ export default function InstallPrompt() {
   };
 
   const handleDismiss = () => {
-    setDismissed(true);
-    setShowGuide(false);
+    setUserDismissed(true);
     setDeferredPrompt(null);
-    localStorage.setItem("mp-install-dismissed", "1");
+    try {
+      localStorage.setItem("mp-install-dismissed", "1");
+    } catch {
+      /* sin almacenamiento: el descarte dura solo esta sesión */
+    }
   };
 
   if (dismissed || isInStandaloneMode()) return null;

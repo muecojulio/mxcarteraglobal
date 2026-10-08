@@ -11,21 +11,28 @@ import { AssetSearch } from "@/components/AssetSearch";
 import type { Quote } from "@/lib/market-data/types";
 import { useUsdMxn, toMxn, formatMxn } from "@/lib/fx";
 import { useToast } from "@/components/Toast";
+import {
+  useHydratedState,
+  useMounted,
+  localStorageIdentity,
+} from "@/lib/use-hydrated-value";
+
+/** Constante de módulo: useSyncExternalStore exige un snapshot estable. */
+const EMPTY_SYMBOLS: string[] = [];
 
 export default function WatchlistPage() {
   const toast = useToast();
-  const [symbols, setSymbols] = useState<string[]>([]);
-  const [hydrated, setHydrated] = useState(false);
+  const [symbols, setSymbols] = useHydratedState<string[]>(
+    localStorageIdentity("marketpulse_watchlist"),
+    loadWatchlist,
+    EMPTY_SYMBOLS
+  );
+  const hydrated = useMounted();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"ALL" | "MX" | "US">("ALL");
   const [showAdd, setShowAdd] = useState(false);
   const [addQuery, setAddQuery] = useState("");
   const [sortBy, setSortBy] = useState<"symbol" | "change">("symbol");
-
-  useEffect(() => {
-    setSymbols(loadWatchlist());
-    setHydrated(true);
-  }, []);
 
   useEffect(() => {
     if (!hydrated) return;

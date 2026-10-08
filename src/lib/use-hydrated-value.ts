@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useSyncExternalStore } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 
 const noSubscribe = () => () => {};
 
@@ -48,6 +48,16 @@ export function useHydratedValue<T>(
   return useSyncExternalStore(noSubscribe, getSnapshot, () => serverValue);
 }
 
+/**
+ * `false` durante el SSR y la hidratación, `true` después.
+ *
+ * Sustituye el clásico `useState(false)` + `useEffect(() => setMounted(true))`,
+ * que es otro setState síncrono dentro de un effect.
+ */
+export function useMounted(): boolean {
+  return useSyncExternalStore(noSubscribe, () => true, () => false);
+}
+
 /** Identidad basada en una clave de localStorage. */
 export function localStorageIdentity(key: string): () => string {
   return () => {
@@ -57,4 +67,33 @@ export function localStorageIdentity(key: string): () => string {
       return "";
     }
   };
+}
+
+/**
+ * Como `useHydratedValue`, pero editable: devuelve `[valor, setValor]`.
+ *
+ * El valor es la edición local si la hay, y si no el dato del dispositivo. Así
+ * se puede hidratar sin setState dentro de un effect y a la vez dejar que el
+ * usuario modifique el campo. Escribir en el almacenamiento sigue siendo
+ * responsabilidad de quien llama (igual que antes).
+ *
+ * `??` y no `||`: una edición a `false` o `""` debe ganar sobre el valor
+ * hidratado.
+ */
+export function useHydratedState<T>(
+  readIdentity: () => string,
+  compute: () => T,
+  serverValue: T
+): [T, (value: T | ((prev: T) => T)) => void] {
+  const hydrated = useHydratedValue<T>(readIdentity, compute, serverValue);
+  const [override, setOverride] = useState<T | null>(null);
+  const value = override ?? hydrated;
+
+  // Acepta valor o función, como setState. La función recibe el valor vigente
+  // (edición local o hidratado), no el override en crudo.
+  const set = (next: T | ((prev: T) => T)) => {
+    setOverride(typeof next === "function" ? (next as (prev: T) => T)(value) : next);
+  };
+
+  return [value, set];
 }
