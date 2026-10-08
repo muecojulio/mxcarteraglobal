@@ -39,11 +39,13 @@ export default function WatchlistPage() {
     saveWatchlist(symbols);
   }, [symbols, hydrated]);
 
-  const { data, loading, wsStatus, error, refresh } = useQuotes(symbols, 45_000);
+  const { data, loading, liveStatus, error, refresh } = useQuotes(symbols, 45_000);
   const { fx } = useUsdMxn(120_000);
   const usdMxn = fx?.usdMxn ?? null;
 
-  const quotes: Quote[] = data?.quotes ?? [];
+  // Memoizado: `data?.quotes ?? []` crea un array nuevo en cada render cuando
+  // aún no hay datos, y eso invalidaba el `useMemo` de `filtered` siempre.
+  const quotes = useMemo<Quote[]>(() => data?.quotes ?? [], [data]);
   const usingReal = data?.usingRealData ?? false;
 
   const filtered = useMemo(() => {
@@ -102,7 +104,7 @@ export default function WatchlistPage() {
                 EN VIVO
               </span>
             )}
-            <LiveBadge status={wsStatus} />
+            <LiveBadge status={liveStatus} />
           </div>
           <div className="flex items-center gap-2">
             <button

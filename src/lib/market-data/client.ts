@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { usePageVisible, isPageVisibleNow } from "@/lib/use-page-visible";
 import type { Quote, SearchResult, IndexQuote } from "./types";
-import { useRealtimeTicks, mergeQuotesWithTicks } from "./realtime";
+import type { LiveStatus } from "./live-status";
 import { cacheGet, cacheSet, cacheGetStale, CACHE_TTL } from "@/lib/local-cache";
 
 type QuotesResponse = {
@@ -51,14 +51,14 @@ type DividendsResponse = {
 export function useQuotes(
   symbols: string[],
   refreshMs = 60_000,
-  opts?: { realtime?: boolean }
+  opts?: { autoRefresh?: boolean }
 ) {
   const [data, setData] = useState<QuotesResponse | null>(null);
   // `loading` se deriva de para qué clave terminó la carga, en vez de
   // setearse en síncrono dentro del effect.
   const [settledFor, setSettledFor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const realtime = opts?.realtime !== false; // por defecto ON
+  const autoRefresh = opts?.autoRefresh !== false; // por defecto ON
 
   const key = symbols.join(",");
 
@@ -114,29 +114,23 @@ export function useQuotes(
     }
   }, [fetchQuotes, refreshMs, pageVisible, cacheKey]);
 
-  // WebSocket solo en primer plano
-  const { ticks, status: wsStatus } = useRealtimeTicks(
-    realtime && pageVisible ? symbols : []
-  );
-
-  const merged = useMemo(() => {
-    if (!data) return null;
-    if (!realtime || wsStatus !== "live") return data;
-    const quotes = mergeQuotesWithTicks(data.quotes, ticks);
-    return {
-      ...data,
-      quotes,
-      provider:
-        wsStatus === "live" ? `${data.provider}+websocket` : data.provider,
-    };
-  }, [data, ticks, wsStatus, realtime]);
+  // Estado de frescura derivado: sin WebSocket, el refresco es el sondeo al
+  // servidor (que es quien tiene la llave del proveedor). Si la pestaña está en
+  // segundo plano no se refresca, para no gastar cuota.
+  const liveStatus: LiveStatus = useMemo(() => {
+    if (!autoRefresh || refreshMs <= 0 || symbols.length === 0) {
+      return { mode: "off", intervalMs: refreshMs };
+    }
+    if (!pageVisible) return { mode: "paused", intervalMs: refreshMs };
+    return { mode: "poll", intervalMs: refreshMs };
+  }, [autoRefresh, refreshMs, pageVisible, symbols.length]);
 
   return {
-    data: merged,
+    data,
     loading,
     error,
     refresh: () => fetchQuotes({ force: true }),
-    wsStatus: realtime ? wsStatus : ("off" as const),
+    liveStatus,
   };
 }
 

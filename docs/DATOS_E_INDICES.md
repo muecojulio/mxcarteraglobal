@@ -39,7 +39,7 @@ Una sola fuente de verdad: `src/lib/http-cache.ts`. Cada ruta declara su políti
 Reglas:
 
 - Solo las respuestas **200** son cacheables. Cualquier 4xx/5xx sale como `private, no-store` para no fijar un error en el CDN.
-- Rutas del usuario o con secretos (`/api/sync`, `/api/realtime/token`) son siempre `private, no-store`.
+- Rutas del usuario o con secretos (`/api/sync`) son siempre `private, no-store`.
 - Rutas no declaradas caen en `private, no-store` (fallo seguro).
 
 Políticas vigentes (segundos, `s-maxage` / `stale-while-revalidate`):
@@ -53,13 +53,13 @@ Políticas vigentes (segundos, `s-maxage` / `stale-while-revalidate`):
 | `/api/analysis`, `/api/metrics` | 3600 | 86400 |
 | `/api/risk-free` | 3600 | 7200 |
 | `/api/dividend-growth` | 86400 | 172800 |
-| `/api/sync`, `/api/realtime/token` | — | `private, no-store` |
+| `/api/sync` | — | `private, no-store` |
 
 Del lado del cliente, `src/lib/local-cache.ts` aplica `CACHE_TTL` (cotizaciones 45 s, índices 60 s, FX 5 min, búsqueda 10 min, dividendos 30 min, ficha 2 min).
 
 ## Caché offline (service worker)
 
-`public/sw.js` es caché de dispositivo, independiente de la anterior. No guarda nada marcado `no-store` ni `private`, excluye explícitamente `/api/sync` y `/api/realtime/token`, tiene tope de 120 entradas, caducidad (5 min para `/api/*`, 24 h para páginas) y responde JSON en lugar del HTML de la app cuando falla una consulta de API.
+`public/sw.js` es caché de dispositivo, independiente de la anterior. No guarda nada marcado `no-store` ni `private`, excluye explícitamente `/api/sync`, tiene tope de 120 entradas, caducidad (5 min para `/api/*`, 24 h para páginas) y responde JSON en lugar del HTML de la app cuando falla una consulta de API.
 
 ## Si más adelante hay DB en la nube
 

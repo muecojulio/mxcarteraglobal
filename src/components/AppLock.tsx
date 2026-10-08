@@ -7,6 +7,8 @@ import {
   localStorageIdentity,
 } from "@/lib/use-hydrated-value";
 import {
+  PIN_MAX_LENGTH,
+  PIN_MIN_LENGTH,
   isLockEnabled,
   isUnlockedThisSession,
   markUnlocked,
@@ -19,6 +21,12 @@ import {
   resetPinWithRecovery,
   getRecoveryContacts,
 } from "@/lib/app-lock";
+
+/** "90 s" o "3 min" según la espera. */
+function waitLabel(ms: number): string {
+  const s = Math.ceil(ms / 1000);
+  return s >= 60 ? `${Math.round(s / 60)} min` : `${s} s`;
+}
 
 /** Constante de módulo: useSyncExternalStore exige un snapshot estable. */
 const EMPTY_CONTACTS = { email: "", phone: "" };
@@ -64,7 +72,7 @@ export default function AppLock({ children }: { children: React.ReactNode }) {
       try {
         const wait = lockoutRemainingMs();
         if (wait > 0) {
-          setError(`Espera ${Math.ceil(wait / 1000)} s tras varios intentos`);
+          setError(`Espera ${waitLabel(wait)} tras varios intentos`);
           setPin("");
           return;
         }
@@ -77,7 +85,7 @@ export default function AppLock({ children }: { children: React.ReactNode }) {
           const again = lockoutRemainingMs();
           setError(
             again > 0
-              ? `Demasiados intentos. Espera ${Math.ceil(again / 1000)} s`
+              ? `Demasiados intentos. Espera ${waitLabel(again)}`
               : "Clave incorrecta"
           );
           setPin("");
@@ -151,9 +159,9 @@ export default function AppLock({ children }: { children: React.ReactNode }) {
               autoComplete="current-password"
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/\s/g, ""))}
-              placeholder="Clave (4–12)"
+              placeholder="Clave (mín. 6)"
               className="w-full text-center text-2xl tracking-[0.35em] bg-card border border-border rounded-2xl py-3.5 px-4 outline-none focus:ring-2 focus:ring-primary/40 min-h-[56px]"
-              maxLength={12}
+              maxLength={PIN_MAX_LENGTH}
               autoFocus
             />
             {error && (
@@ -161,7 +169,7 @@ export default function AppLock({ children }: { children: React.ReactNode }) {
             )}
             <button
               type="submit"
-              disabled={busy || pin.length < 4}
+              disabled={busy || pin.length < PIN_MIN_LENGTH}
               className="w-full min-h-[52px] rounded-2xl bg-primary text-primary-foreground font-semibold text-base disabled:opacity-50"
             >
               {busy ? "…" : "Desbloquear"}
@@ -182,16 +190,16 @@ export default function AppLock({ children }: { children: React.ReactNode }) {
               inputMode="numeric"
               value={newPin}
               onChange={(e) => setNewPin(e.target.value.replace(/\s/g, ""))}
-              placeholder="Nueva clave (4–12)"
+              placeholder="Nueva clave (mín. 6)"
               className="w-full text-center bg-card border border-border rounded-2xl py-3 px-4 text-sm outline-none focus:ring-2 focus:ring-primary/40 min-h-[52px]"
-              maxLength={12}
+              maxLength={PIN_MAX_LENGTH}
             />
             {error && (
               <p className="text-sm text-danger text-center font-medium">{error}</p>
             )}
             <button
               type="submit"
-              disabled={busy || recoveryCode.length < 8 || newPin.length < 4}
+              disabled={busy || recoveryCode.length < 8 || newPin.length < PIN_MIN_LENGTH}
               className="w-full min-h-[52px] rounded-2xl bg-primary text-primary-foreground font-semibold text-base disabled:opacity-50"
             >
               {busy ? "…" : "Restablecer clave"}

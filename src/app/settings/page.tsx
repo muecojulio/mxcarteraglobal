@@ -7,21 +7,23 @@ import { TaxEstimator } from "@/components/TaxEstimator";
 import { useState } from "react";
 import {
   useHydratedState,
+  useHydratedValue,
   useMounted,
   localStorageIdentity,
 } from "@/lib/use-hydrated-value";
 import {
+  PIN_MAX_LENGTH,
+  PIN_MIN_LENGTH,
   isLockEnabled,
+  isPinWeak,
   setPin,
   disableLock,
   registerBiometric,
-  setBioPreferred,
   isBioPreferred,
   canUseWebAuthn,
   lockNow,
   getRecoveryContacts,
 } from "@/lib/app-lock";
-import { persistSummary } from "@/lib/persist";
 import {
   getStoredTheme,
   applyTheme,
@@ -51,6 +53,13 @@ export default function SettingsPage() {
   const [bioOn, setBioOn] = useHydratedState(
     localStorageIdentity("mxcg_lock_bio"),
     isBioPreferred,
+    false
+  );
+  // La longitud de la clave se guarda aparte (no es un secreto) para poder
+  // avisar cuando quedó por debajo del mínimo actual.
+  const weakPin = useHydratedValue(
+    localStorageIdentity("mxcg_lock_pin_len"),
+    isPinWeak,
     false
   );
   const [newPin, setNewPin] = useState("");
@@ -124,6 +133,14 @@ export default function SettingsPage() {
               Al abrir la app pedirá tu clave. Opcional: Face ID / huella en dispositivos compatibles.
               Todo queda solo en este dispositivo.
             </p>
+            {lockOn && weakPin && (
+              <p className="text-xs rounded-xl bg-amber-500/10 border border-amber-500/30 p-2.5 text-foreground leading-relaxed">
+                Tu clave actual es más corta que {PIN_MIN_LENGTH} caracteres.
+                Para la bóveda cifrada eso es poco: cámbiala por una de{" "}
+                {PIN_MIN_LENGTH}–{PIN_MAX_LENGTH} caracteres (o una frase). Tu
+                cartera sigue cifrada con la misma llave.
+              </p>
+            )}
             {!lockOn ? (
               <>
                 <input
@@ -131,9 +148,9 @@ export default function SettingsPage() {
                   inputMode="numeric"
                   value={newPin}
                   onChange={(e) => setNewPin(e.target.value.replace(/\s/g, ""))}
-                  placeholder="Nueva clave (4–12)"
+                  placeholder={`Nueva clave (mín. ${PIN_MIN_LENGTH})`}
                   className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm min-h-[48px]"
-                  maxLength={12}
+                  maxLength={PIN_MAX_LENGTH}
                 />
                 <input
                   type="password"
@@ -142,7 +159,7 @@ export default function SettingsPage() {
                   onChange={(e) => setConfirmPin(e.target.value.replace(/\s/g, ""))}
                   placeholder="Confirmar clave"
                   className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm min-h-[48px]"
-                  maxLength={12}
+                  maxLength={PIN_MAX_LENGTH}
                 />
                 <input
                   type="email"
@@ -164,8 +181,8 @@ export default function SettingsPage() {
                   onClick={async () => {
                     setLockMsg("");
                     setRecoveryShown("");
-                    if (newPin.length < 4) {
-                      setLockMsg("Mínimo 4 caracteres");
+                    if (newPin.length < PIN_MIN_LENGTH) {
+                      setLockMsg(`Mínimo ${PIN_MIN_LENGTH} caracteres`);
                       return;
                     }
                     if (newPin !== confirmPin) {

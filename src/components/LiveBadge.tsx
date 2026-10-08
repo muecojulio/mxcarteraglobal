@@ -1,31 +1,35 @@
 "use client";
 
-export function LiveBadge({
-  status,
-}: {
-  status?: "idle" | "connecting" | "live" | "error" | "off";
-}) {
-  if (!status || status === "off" || status === "idle") return null;
-  const label =
-    status === "live"
-      ? "EN VIVO"
-      : status === "connecting"
-      ? "Conectando…"
-      : "WS";
+import { liveLabel, type LiveStatus } from "@/lib/market-data/live-status";
+
+/**
+ * Etiqueta de frescura de los datos.
+ *
+ * Antes decía "EN VIVO" porque había un WebSocket con la llave de Finnhub en el
+ * navegador. Esa ruta se retiró (la llave ya no sale del servidor), así que la
+ * etiqueta ahora dice cada cuánto se refresca y en qué estado está.
+ */
+export function LiveBadge({ status }: { status?: LiveStatus }) {
+  if (!status || status.mode === "off") return null;
+
+  const label = liveLabel(status);
   const color =
-    status === "live"
+    status.mode === "poll"
       ? "bg-success/15 text-success"
-      : status === "connecting"
-      ? "bg-secondary text-muted"
-      : "bg-danger/15 text-danger";
+      : "bg-secondary text-muted";
+
   return (
     <span
       className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${color}`}
-      title="WebSocket Finnhub (trades US)"
+      title={
+        status.mode === "poll"
+          ? `Se actualiza automáticamente cada ${label}`
+          : "Actualización automática en pausa (pestaña en segundo plano)"
+      }
     >
-      {status === "live" && (
+      {status.mode === "poll" ? (
         <span className="inline-block w-1.5 h-1.5 rounded-full bg-success mr-1 animate-pulse" />
-      )}
+      ) : null}
       {label}
     </span>
   );

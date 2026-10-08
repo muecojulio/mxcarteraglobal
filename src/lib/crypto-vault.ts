@@ -1,13 +1,24 @@
 /**
- * Cifrado local AES-GCM. La llave maestra se abre con el PIN
+ * Cifrado local AES-GCM. La llave maestra se abre con la clave
  * y vive solo en sessionStorage mientras la app está desbloqueada.
+ *
+ * Formato del paquete que envuelve la llave maestra (`mxcg_vault_wrap`):
+ * - actual: `p2$<iteraciones>$<iv>$<ciphertext>` (salt en `mxcg_vault_salt`).
+ * - antiguo: `<iv>.<ciphertext>`, con 120.000 iteraciones fijas y sin poder
+ *   subirlas sin dejar fuera a los vaults ya creados. Se sigue leyendo y, al
+ *   abrir con éxito, se re-envuelve en el formato actual.
  */
 
 const MK_WRAP = "mxcg_vault_wrap";
 const MK_SALT = "mxcg_vault_salt";
 const MK_SESSION = "mxcg_vault_mk";
-const DEVICE_WRAP = "mxcg_vault_device"; // si aún no hay PIN
+const DEVICE_WRAP = "mxcg_vault_device"; // si aún no hay clave
 const ENC_PREFIX = "ENC1.";
+
+/** Iteraciones del formato actual y del antiguo. */
+const WRAP_ITERATIONS = 210_000;
+const LEGACY_WRAP_ITERATIONS = 120_000;
+const WRAP_PREFIX = "p2$";
 
 function b64(buf: ArrayBuffer | Uint8Array<ArrayBuffer>): string {
   const u = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
@@ -23,7 +34,11 @@ function unb64(s: string): Uint8Array<ArrayBuffer> {
   return u;
 }
 
-async function derivePinKey(pin: string, salt: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
+async function derivePinKey(
+  pin: string,
+  salt: Uint8Array<ArrayBuffer>,
+  iterations: number = WRAP_ITERATIONS
+): Promise<CryptoKey> {
   const base = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(`mxcg-vault:${pin}`),
@@ -35,7 +50,7 @@ async function derivePinKey(pin: string, salt: Uint8Array<ArrayBuffer>): Promise
     {
       name: "PBKDF2",
       salt,
-      iterations: 120_000,
+      iterations,
       hash: "SHA-256",
     },
     base,
@@ -105,22 +120,48 @@ export function clearSessionMasterKey(): void {
   sessionStorage.removeItem(MK_SESSION);
 }
 
-async function wrapKey(rawMk: Uint8Array<ArrayBuffer>, wrapKey: CryptoKey): Promise<string> {
+type WrapPack = { iterations: number; iv: string; ct: string; legacy: boolean };
+
+/** Lee el paquete envuelto, aceptando el formato antiguo. */
+function parseWrap(pack: string): WrapPack {
+  if (pack.startsWith(WRAP_PREFIX)) {
+    const [, iterationsRaw, ivB, ctB] = pack.split("$");
+    const iterations = Number(iterationsRaw);
+    if (
+      !Number.isInteger(iterations) ||
+      iterations < 100_000 ||
+      iterations > 600_000 ||
+      !ivB ||
+      !ctB
+    ) {
+      throw new Error("Llave envuelta inválida");
+    }
+    return { iterations, iv: ivB, ct: ctB, legacy: false };
+  }
+  const [ivB, ctB] = pack.split(".");
+  if (!ivB || !ctB) throw new Error("Llave envuelta inválida");
+  return { iterations: LEGACY_WRAP_ITERATIONS, iv: ivB, ct: ctB, legacy: true };
+}
+
+async function wrapKey(
+  rawMk: Uint8Array<ArrayBuffer>,
+  wrapKey: CryptoKey,
+  iterations: number = WRAP_ITERATIONS
+): Promise<string> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ct = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv },
     wrapKey,
     rawMk
   );
-  return b64(iv) + "." + b64(ct);
+  return `${WRAP_PREFIX}${iterations}$${b64(iv)}$${b64(ct)}`;
 }
 
-async function unwrapKey(pack: string, wrapKey: CryptoKey): Promise<Uint8Array<ArrayBuffer>> {
-  const [ivB, ctB] = pack.split(".");
+async function unwrapKey(pack: WrapPack, wrapKey: CryptoKey): Promise<Uint8Array<ArrayBuffer>> {
   const pt = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: unb64(ivB) },
+    { name: "AES-GCM", iv: unb64(pack.iv) },
     wrapKey,
-    unb64(ctB)
+    unb64(pack.ct)
   );
   return new Uint8Array(pt);
 }
@@ -135,17 +176,33 @@ function getSalt(): Uint8Array<ArrayBuffer> {
   return unb64(s);
 }
 
-/** Abre o crea la llave maestra con el PIN y la deja en sesión. */
+/** Abre o crea la llave maestra con la clave y la deja en sesión. */
 export async function unlockVaultWithPin(pin: string): Promise<void> {
   const salt = getSalt();
-  const pinKey = await derivePinKey(pin, salt);
   const wrapped = localStorage.getItem(MK_WRAP);
+
   if (wrapped) {
-    const mk = await unwrapKey(wrapped, pinKey);
+    // Las iteraciones viajan dentro del paquete, así que se puede subir el
+    // costo sin dejar fuera a los vaults creados antes.
+    const pack = parseWrap(wrapped);
+    const pinKey = await derivePinKey(pin, salt, pack.iterations);
+    const mk = await unwrapKey(pack, pinKey);
     setSessionMasterKey(mk);
+
+    if (pack.legacy) {
+      // Re-envuelve con el formato actual y más iteraciones (la llave no cambia).
+      try {
+        const fresh = await derivePinKey(pin, salt, WRAP_ITERATIONS);
+        localStorage.setItem(MK_WRAP, await wrapKey(mk, fresh, WRAP_ITERATIONS));
+      } catch {
+        /* si falla, el paquete antiguo sigue siendo válido */
+      }
+    }
     return;
   }
+
   // ¿había llave de dispositivo?
+  const pinKey = await derivePinKey(pin, salt, WRAP_ITERATIONS);
   const device = localStorage.getItem(DEVICE_WRAP);
   let mk: Uint8Array<ArrayBuffer>;
   if (device) {
@@ -153,8 +210,7 @@ export async function unlockVaultWithPin(pin: string): Promise<void> {
   } else {
     mk = await generateMasterKeyRaw();
   }
-  const pack = await wrapKey(mk, pinKey);
-  localStorage.setItem(MK_WRAP, pack);
+  localStorage.setItem(MK_WRAP, await wrapKey(mk, pinKey, WRAP_ITERATIONS));
   localStorage.removeItem(DEVICE_WRAP);
   setSessionMasterKey(mk);
 }

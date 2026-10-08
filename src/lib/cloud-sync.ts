@@ -4,7 +4,36 @@ import {
   persistGetString,
   persistSetString,
 } from "./persist";
-async function cloudKeyFromPass(pass: string): Promise<Uint8Array<ArrayBuffer>> {
+import {
+  KDF_HASH,
+  KDF_ITERATIONS,
+  LEGACY_SALT,
+  isSyncEnvelope,
+  type AnySyncEnvelope,
+  type SyncEnvelope,
+} from "./sync-envelope";
+
+export { isSyncEnvelope };
+export type { AnySyncEnvelope, LegacySyncEnvelope, SyncEnvelope } from "./sync-envelope";
+
+function toBase64(bytes: Uint8Array): string {
+  let s = "";
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s);
+}
+
+function fromBase64(text: string): Uint8Array<ArrayBuffer> {
+  const bin = atob(text);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function cloudKeyFromPass(
+  pass: string,
+  saltB64?: string,
+  iterations: number = KDF_ITERATIONS
+): Promise<Uint8Array<ArrayBuffer>> {
   const enc = new TextEncoder();
   const base = await crypto.subtle.importKey(
     "raw",
@@ -16,9 +45,11 @@ async function cloudKeyFromPass(pass: string): Promise<Uint8Array<ArrayBuffer>> 
   const bits = await crypto.subtle.deriveBits(
     {
       name: "PBKDF2",
-      salt: enc.encode("mxcg-cloud-salt-v1"),
-      iterations: 120_000,
-      hash: "SHA-256",
+      // v2: salt aleatoria por respaldo, guardada en el sobre. v1 (y cualquier
+      // respaldo previo): la salt fija compartida, que permitía precomputar.
+      salt: saltB64 ? fromBase64(saltB64) : enc.encode(LEGACY_SALT),
+      iterations,
+      hash: KDF_HASH,
     },
     base,
     256
@@ -37,35 +68,33 @@ export function getLastSyncAt(): string | null {
   return localStorage.getItem(SYNC_AT_KEY);
 }
 
-export type SyncEnvelope = {
-  v: 1;
-  app: "MX Cartera Global";
-  updatedAt: string;
-  blob: string;
-};
-
 export async function buildEnvelope(pass: string): Promise<SyncEnvelope> {
   const { encryptText } = await import("./crypto-vault");
-  const mk = await cloudKeyFromPass(pass);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const mk = await cloudKeyFromPass(pass, toBase64(salt));
   const payload = JSON.stringify({
     updatedAt: new Date().toISOString(),
     data: collectSyncPayload(),
   });
   const blob = await encryptText(payload, mk);
   return {
-    v: 1,
+    v: 2,
     app: "MX Cartera Global",
     updatedAt: new Date().toISOString(),
+    salt: toBase64(salt),
+    kdf: { name: "PBKDF2", hash: KDF_HASH, iterations: KDF_ITERATIONS },
     blob,
   };
 }
 
 export async function applyEnvelope(
-  env: SyncEnvelope,
+  env: AnySyncEnvelope,
   pass: string
 ): Promise<void> {
   const { decryptText } = await import("./crypto-vault");
-  const mk = await cloudKeyFromPass(pass);
+  const saltB64 = env.v === 2 ? env.salt : undefined;
+  const iterations = env.v === 2 ? env.kdf.iterations : KDF_ITERATIONS;
+  const mk = await cloudKeyFromPass(pass, saltB64, iterations);
   const raw = await decryptText(env.blob, mk);
   const parsed = JSON.parse(raw) as {
     data: Record<string, string | null>;
@@ -73,8 +102,17 @@ export async function applyEnvelope(
   applySyncPayload(parsed.data || {});
 }
 
+/** Mínimo para crear respaldos nuevos. */
+export const CLOUD_PASS_MIN = 6;
+/** Mínimo para *bajar*: los respaldos ya subidos con claves cortas deben poder abrirse. */
+const CLOUD_PASS_LEGACY_MIN = 4;
+
 export async function pushCloud(pass: string): Promise<{ id: string }> {
-  if (!pass || pass.length < 4) throw new Error("Escribe una clave de nube (mín. 4)");
+  if (!pass || pass.length < CLOUD_PASS_MIN) {
+    throw new Error(
+      `Escribe una clave de nube de al menos ${CLOUD_PASS_MIN} caracteres`
+    );
+  }
   const env = await buildEnvelope(pass);
   const id = getSyncId();
   const res = await fetch("/api/sync", {
@@ -91,13 +129,26 @@ export async function pushCloud(pass: string): Promise<{ id: string }> {
 }
 
 export async function pullCloud(id?: string, pass?: string): Promise<void> {
-  if (!pass || pass.length < 4) throw new Error("Escribe la misma clave de nube");
+  if (!pass || pass.length < CLOUD_PASS_LEGACY_MIN) {
+    throw new Error("Escribe la misma clave de nube");
+  }
   const useId = (id || getSyncId() || "").trim();
   if (!useId) throw new Error("No hay ID de nube");
   const res = await fetch(`/api/sync?id=${encodeURIComponent(useId)}`);
   const json = await res.json();
   if (!res.ok) throw new Error(json.error || "No se pudo bajar");
-  await applyEnvelope(json.envelope as SyncEnvelope, pass);
+  if (!isSyncEnvelope(json.envelope)) {
+    throw new Error("El respaldo no tiene el formato esperado");
+  }
+  try {
+    await applyEnvelope(json.envelope, pass);
+  } catch {
+    // AES-GCM no distingue "clave incorrecta" de "dato alterado": si el blob lo
+    // reemplazó alguien que tenía el ID, el resultado es el mismo.
+    throw new Error(
+      "No se pudo descifrar: revisa la clave (o la copia en la nube fue reemplazada o está dañada)"
+    );
+  }
   localStorage.setItem(SYNC_ID_KEY, useId);
   persistSetString(SYNC_ID_KEY, useId);
   localStorage.setItem(SYNC_AT_KEY, new Date().toISOString());

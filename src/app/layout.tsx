@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from "next";
+import { connection } from "next/server";
+import { headers } from "next/headers";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import "./globals.css";
@@ -57,11 +59,18 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // La CSP de producción lleva un nonce por petición (ver `src/proxy.ts`), así
+  // que los scripts inline necesitan el valor de esta petición: eso obliga a
+  // renderizar en el servidor. `connection()` lo deja explícito, porque el
+  // nonce se pierde si Next intenta prerenderizar la página.
+  await connection();
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+
   return (
     <html
       lang="es"
@@ -78,6 +87,7 @@ export default function RootLayout({
         />
         <meta name="apple-mobile-web-app-title" content="MX Cartera Global" />
         <script
+          nonce={nonce}
           dangerouslySetInnerHTML={{
             __html: `(function(){try{var t=localStorage.getItem('marketpulse_theme');var d=document.documentElement;d.classList.remove('light','dark');if(t==='light')d.classList.add('light');else if(t==='dark')d.classList.add('dark');}catch(e){}})();`,
           }}
