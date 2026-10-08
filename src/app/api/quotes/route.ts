@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getMarketDataProvider, isUsingRealData } from "@/lib/market-data";
+import { getMarketDataProvider } from "@/lib/market-data";
 import { sanitizeSymbolList } from "@/lib/sanitize";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       quotes,
       count: quotes.length,
-      usingRealData: isUsingRealData(),
+      usingRealData: quotes.length > 0 && quotes.every((quote) => quote.source !== "mock"),
       provider: provider.name,
     });
   } catch (err) {

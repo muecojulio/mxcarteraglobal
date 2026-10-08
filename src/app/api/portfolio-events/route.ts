@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { freeNasdaqCalendar } from "@/lib/free-finance";
+import { isExcludedInstrument, normalizeYahooSymbol } from "@/lib/market-data/types";
+import { sanitizeSymbolList } from "@/lib/sanitize";
 
 export const dynamic = "force-dynamic";
 
@@ -18,15 +21,11 @@ type EventItem = {
  * Próximos dividendos, earnings y splits solo de símbolos poseídos.
  */
 export async function GET(req: NextRequest) {
-  const raw = req.nextUrl.searchParams.get("symbols") || "";
-  const symbols = [
-    ...new Set(
-      raw
-        .split(",")
-        .map((s) => s.trim().toUpperCase())
-        .filter(Boolean)
-    ),
-  ].slice(0, 40);
+  const symbols = [...new Set(
+    sanitizeSymbolList(req.nextUrl.searchParams.get("symbols"), 40)
+      .map(normalizeYahooSymbol)
+      .filter((symbol) => !isExcludedInstrument(symbol))
+  )];
 
   if (!symbols.length) {
     return NextResponse.json({
@@ -45,41 +44,52 @@ export async function GET(req: NextRequest) {
 
   const events: EventItem[] = [];
 
-  // Dividendos (FMP calendar — principalmente US)
-  if (fmp) {
-    try {
-      const res = await fetch(
-        `https://financialmodelingprep.com/stable/dividends-calendar?from=${from}&to=${to}&apikey=${fmp}`,
-        { next: { revalidate: 3600 } }
-      );
-      if (res.ok) {
-        const list = await res.json();
-        if (Array.isArray(list)) {
-          for (const d of list) {
-            const sym = String(d.symbol || "").toUpperCase();
-            if (!set.has(sym)) continue;
-            events.push({
-              id: `div-${sym}-${d.date}`,
-              date: d.date,
-              symbol: sym,
-              type: "dividend",
-              title: `Ex-dividendo ${sym}`,
-              amount: d.adjDividend ?? d.dividend ?? null,
-              detail: d.paymentDate
-                ? `Pago: ${d.paymentDate}`
-                : undefined,
-              source: "fmp",
-            });
-          }
-        }
-      }
-    } catch {
-      /* */
+  // Calendarios públicos Nasdaq primero; las claves existentes son respaldo.
+  try {
+    const [earningRows, dividendRows] = await Promise.all([
+      freeNasdaqCalendar(from, to, "earnings"),
+      freeNasdaqCalendar(from, to, "dividends"),
+    ]);
+    for (const value of earningRows) {
+      if (!value || typeof value !== "object") continue;
+      const row = value as Record<string, unknown>;
+      const sym = normalizeYahooSymbol(String(row.symbol || row.ticker || ""));
+      const date = String(row.date || row.reportDate || row.earningsDate || "").slice(0, 10);
+      if (!set.has(sym) || isExcludedInstrument(sym) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+      events.push({
+        id: `earn-nasdaq-${sym}-${date}`,
+        date,
+        symbol: sym,
+        type: "earnings",
+        title: `Resultados ${sym}`,
+        detail: row.epsForecast != null ? `EPS est. ${row.epsForecast}` : undefined,
+        source: "nasdaq-public",
+      });
     }
+    for (const value of dividendRows) {
+      if (!value || typeof value !== "object") continue;
+      const row = value as Record<string, unknown>;
+      const sym = normalizeYahooSymbol(String(row.symbol || row.ticker || ""));
+      const date = String(row.exOrEffDate || row.exDate || row.date || "").slice(0, 10);
+      if (!set.has(sym) || isExcludedInstrument(sym) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+      const amount = row.amount ?? row.dividend ?? row.dividendAmount;
+      events.push({
+        id: `div-nasdaq-${sym}-${date}`,
+        date,
+        symbol: sym,
+        type: "dividend",
+        title: `Dividendo ${sym}`,
+        amount: amount != null && Number.isFinite(Number(amount)) ? Number(amount) : null,
+        detail: row.paymentDate ? `Pago: ${row.paymentDate}` : undefined,
+        source: "nasdaq-public",
+      });
+    }
+  } catch {
+    /* Continúa con respaldos configurados. */
   }
 
-  // Earnings — Finnhub
-  if (finnhub) {
+  const missingEarnings = symbols.some((symbol) => !events.some((event) => event.type === "earnings" && event.symbol === symbol));
+  if (finnhub && missingEarnings) {
     try {
       const res = await fetch(
         `https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&token=${finnhub}`,
@@ -87,23 +97,47 @@ export async function GET(req: NextRequest) {
       );
       if (res.ok) {
         const data = await res.json();
-        const list = data.earningsCalendar || [];
-        for (const e of list) {
-          const sym = String(e.symbol || "").toUpperCase();
-          if (!set.has(sym)) continue;
+        for (const e of data.earningsCalendar || []) {
+          const sym = normalizeYahooSymbol(String(e.symbol || ""));
+          if (!set.has(sym) || events.some((event) => event.type === "earnings" && event.symbol === sym) || !e.date) continue;
           events.push({
-            id: `earn-${sym}-${e.date}`,
+            id: `earn-fh-${sym}-${e.date}`,
             date: e.date,
             symbol: sym,
             type: "earnings",
             title: `Resultados ${sym}`,
-            detail:
-              e.hour === "bmo"
-                ? "Antes de mercado"
-                : e.hour === "amc"
-                ? "Después de mercado"
-                : e.hour || undefined,
-            source: "finnhub",
+            detail: e.hour === "bmo" ? "Antes de mercado" : e.hour === "amc" ? "Después de mercado" : e.hour || undefined,
+                source: "finnhub",
+          });
+        }
+      }
+    } catch {
+      /* */
+    }
+  }
+
+  const missingDividends = symbols.some((symbol) => !events.some((event) => event.type === "dividend" && event.symbol === symbol));
+  if (fmp && missingDividends) {
+    try {
+      const res = await fetch(
+        `https://financialmodelingprep.com/stable/dividends-calendar?from=${from}&to=${to}&apikey=${fmp}`,
+        { next: { revalidate: 3600 } }
+      );
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list)) for (const d of list) {
+          const sym = normalizeYahooSymbol(String(d.symbol || ""));
+          if (!set.has(sym) || events.some((event) => event.type === "dividend" && event.symbol === sym) || !d.date) continue;
+          const amount = d.adjDividend ?? d.dividend;
+          events.push({
+            id: `div-fmp-${sym}-${d.date}`,
+            date: d.date,
+            symbol: sym,
+            type: "dividend",
+            title: `Dividendo ${sym}`,
+            amount: amount != null && Number.isFinite(Number(amount)) ? Number(amount) : null,
+            detail: d.paymentDate ? `Pago: ${d.paymentDate}` : undefined,
+                source: "fmp-fallback",
           });
         }
       }

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { freeNasdaqCalendar, publicSecRecentIpos } from "@/lib/free-finance";
+import { isExcludedInstrument, normalizeYahooSymbol } from "@/lib/market-data/types";
 
 export const dynamic = "force-dynamic";
 
@@ -35,116 +37,192 @@ export async function GET(req: NextRequest) {
   const events: CalendarEvent[] = [];
 
   try {
-    // Earnings — Finnhub (amplio) + FMP
+    // Calendario público Nasdaq primero; respaldos con claves solo se consultan
+    // si la fuente pública no devuelve eventos para ese tipo.
     if (type === "all" || type === "earnings") {
-      if (finnhub) {
-        const res = await fetch(
-          `https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&token=${finnhub}`,
-          { next: { revalidate: 3600 } }
-        );
-        if (res.ok) {
-          const data = await res.json();
-          const list = data.earningsCalendar || [];
-          for (const e of list.slice(0, 80)) {
-            if (!e.symbol || !e.date) continue;
-            events.push({
-              id: `earn-fh-${e.symbol}-${e.date}`,
-              date: e.date,
-              symbol: e.symbol,
-              title: `Resultados ${e.symbol}`,
-              type: "earnings",
-              region: "US",
-              detail:
-                e.epsEstimate != null
-                  ? `EPS est. ${e.epsEstimate}`
-                  : undefined,
-              source: "finnhub",
-            });
-          }
-        }
+      const rows = await freeNasdaqCalendar(from, to, "earnings");
+      for (const value of rows.slice(0, 100)) {
+        if (!value || typeof value !== "object") continue;
+        const row = value as Record<string, unknown>;
+        const symbol = normalizeYahooSymbol(String(row.symbol || row.ticker || ""));
+        const date = String(row.date || row.reportDate || row.earningsDate || "").slice(0, 10);
+        if (!symbol || isExcludedInstrument(symbol) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+        events.push({
+          id: `earn-nasdaq-${symbol}-${date}`,
+          date,
+          symbol,
+          title: `Resultados ${symbol}`,
+          type: "earnings",
+          region: "US",
+          detail: row.epsForecast != null ? `EPS est. ${row.epsForecast}` : undefined,
+          source: "nasdaq-public",
+        });
       }
-      if (fmp) {
-        const res = await fetch(
-          `https://financialmodelingprep.com/stable/earnings-calendar?from=${from}&to=${to}&apikey=${fmp}`,
-          { next: { revalidate: 3600 } }
-        );
-        if (res.ok) {
-          const list = await res.json();
-          if (Array.isArray(list)) {
-            for (const e of list.slice(0, 40)) {
-              if (!e.symbol || !e.date) continue;
-              const id = `earn-fmp-${e.symbol}-${e.date}`;
-              if (events.some((x) => x.symbol === e.symbol && x.date === e.date && x.type === "earnings"))
-                continue;
+      if (!events.some((event) => event.type === "earnings") && finnhub) {
+        try {
+          const res = await fetch(
+            `https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&token=${finnhub}`,
+            { next: { revalidate: 3600 } }
+          );
+          if (res.ok) {
+            const data = await res.json();
+            for (const e of (data.earningsCalendar || []).slice(0, 80)) {
+              const symbol = normalizeYahooSymbol(String(e.symbol || ""));
+              if (!symbol || isExcludedInstrument(symbol) || !e.date) continue;
               events.push({
-                id,
+                id: `earn-fh-${symbol}-${e.date}`,
                 date: e.date,
-                symbol: e.symbol,
-                title: `Resultados ${e.symbol}`,
+                symbol,
+                title: `Resultados ${symbol}`,
                 type: "earnings",
                 region: "US",
-                detail:
-                  e.epsEstimated != null
-                    ? `EPS est. ${e.epsEstimated}`
-                    : undefined,
-                source: "fmp",
+                detail: e.epsEstimate != null ? `EPS est. ${e.epsEstimate}` : undefined,
+                source: "finnhub",
               });
             }
           }
+        } catch {
+          /* */
         }
       }
-    }
-
-    // Dividends — FMP
-    if ((type === "all" || type === "dividend") && fmp) {
-      const res = await fetch(
-        `https://financialmodelingprep.com/stable/dividends-calendar?from=${from}&to=${to}&apikey=${fmp}`,
-        { next: { revalidate: 3600 } }
-      );
-      if (res.ok) {
-        const list = await res.json();
-        if (Array.isArray(list)) {
-          for (const d of list.slice(0, 50)) {
-            if (!d.symbol || !d.date) continue;
-            const amt = d.adjDividend ?? d.dividend;
-            events.push({
-              id: `div-${d.symbol}-${d.date}`,
-              date: d.date,
-              symbol: d.symbol,
-              title: `Dividendo ${d.symbol}`,
-              type: "dividend",
-              region: "US",
-              detail: amt != null ? `$${amt}` : undefined,
-              source: "fmp",
-            });
+      if (!events.some((event) => event.type === "earnings") && fmp) {
+        try {
+          const res = await fetch(
+            `https://financialmodelingprep.com/stable/earnings-calendar?from=${from}&to=${to}&apikey=${fmp}`,
+            { next: { revalidate: 3600 } }
+          );
+          if (res.ok) {
+            const list = await res.json();
+            if (Array.isArray(list)) for (const e of list.slice(0, 80)) {
+              const symbol = normalizeYahooSymbol(String(e.symbol || ""));
+              if (!symbol || isExcludedInstrument(symbol) || !e.date) continue;
+              events.push({
+                id: `earn-fmp-${symbol}-${e.date}`,
+                date: e.date,
+                symbol,
+                title: `Resultados ${symbol}`,
+                type: "earnings",
+                region: "US",
+                detail: e.epsEstimated != null ? `EPS est. ${e.epsEstimated}` : undefined,
+                source: "fmp-fallback",
+              });
+            }
           }
+        } catch {
+          /* */
         }
       }
     }
 
-    // IPO — Finnhub
-    if ((type === "all" || type === "ipo") && finnhub) {
-      const res = await fetch(
-        `https://finnhub.io/api/v1/calendar/ipo?from=${from}&to=${to}&token=${finnhub}`,
-        { next: { revalidate: 3600 } }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        const list = data.ipoCalendar || [];
-        for (const ipo of list.slice(0, 30)) {
-          if (!ipo.date) continue;
+    if (type === "all" || type === "dividend") {
+      const rows = await freeNasdaqCalendar(from, to, "dividends");
+      for (const value of rows.slice(0, 100)) {
+        if (!value || typeof value !== "object") continue;
+        const row = value as Record<string, unknown>;
+        const symbol = normalizeYahooSymbol(String(row.symbol || row.ticker || ""));
+        const date = String(row.exOrEffDate || row.exDate || row.date || "").slice(0, 10);
+        if (!symbol || isExcludedInstrument(symbol) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+        const amount = row.amount ?? row.dividend ?? row.dividendAmount;
+        events.push({
+          id: `div-nasdaq-${symbol}-${date}`,
+          date,
+          symbol,
+          title: `Dividendo ${symbol}`,
+          type: "dividend",
+          region: "US",
+          detail: amount != null ? `$${amount}` : undefined,
+          source: "nasdaq-public",
+        });
+      }
+      if (!events.some((event) => event.type === "dividend") && fmp) {
+        try {
+          const res = await fetch(
+            `https://financialmodelingprep.com/stable/dividends-calendar?from=${from}&to=${to}&apikey=${fmp}`,
+            { next: { revalidate: 3600 } }
+          );
+          if (res.ok) {
+            const list = await res.json();
+            if (Array.isArray(list)) for (const d of list.slice(0, 100)) {
+              const symbol = normalizeYahooSymbol(String(d.symbol || ""));
+              if (!symbol || isExcludedInstrument(symbol) || !d.date) continue;
+              const amount = d.adjDividend ?? d.dividend;
+              events.push({
+                id: `div-fmp-${symbol}-${d.date}`,
+                date: d.date,
+                symbol,
+                title: `Dividendo ${symbol}`,
+                type: "dividend",
+                region: "US",
+                detail: amount != null ? `$${amount}` : undefined,
+                source: "fmp-fallback",
+              });
+            }
+          }
+        } catch {
+          /* */
+        }
+      }
+    }
+
+    if (type === "all" || type === "ipo") {
+      const rows = await freeNasdaqCalendar(from, to, "ipo");
+      for (const value of rows.slice(0, 60)) {
+        if (!value || typeof value !== "object") continue;
+        const row = value as Record<string, unknown>;
+        const symbol = normalizeYahooSymbol(String(row.symbol || row.ticker || ""));
+        const date = String(row.date || row.pricingDate || row.expectedDate || row.fileDate || "").slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+        events.push({
+          id: `ipo-nasdaq-${symbol || row.companyName}-${date}`,
+          date,
+          ...(symbol && !isExcludedInstrument(symbol) ? { symbol } : {}),
+          title: String(row.companyName || row.name || (symbol ? `IPO ${symbol}` : "IPO")),
+          type: "ipo",
+          region: "US",
+          detail: [row.exchange, row.price, row.status].filter(Boolean).join(" · ") || undefined,
+          source: "nasdaq-public",
+        });
+      }
+      if (!events.some((event) => event.type === "ipo")) {
+        const secRows = await publicSecRecentIpos(from, to);
+        for (const filing of secRows.slice(0, 50)) {
           events.push({
-            id: `ipo-${ipo.symbol || ipo.name}-${ipo.date}`,
-            date: ipo.date,
-            symbol: ipo.symbol,
-            title: ipo.name || `IPO ${ipo.symbol}`,
+            id: `ipo-sec-${filing.symbol || filing.name}-${filing.date}`,
+            date: filing.date,
+            ...(filing.symbol ? { symbol: filing.symbol } : {}),
+            title: `Filings S-1: ${filing.name}`,
             type: "ipo",
             region: "US",
-            detail: [ipo.exchange, ipo.price, ipo.status]
-              .filter(Boolean)
-              .join(" · "),
-            source: "finnhub",
+            detail: "Registro SEC; no es confirmación de salida a bolsa.",
+            source: "sec-edgar-filing",
           });
+        }
+      }
+      if (!events.some((event) => event.type === "ipo") && finnhub) {
+        try {
+          const res = await fetch(
+            `https://finnhub.io/api/v1/calendar/ipo?from=${from}&to=${to}&token=${finnhub}`,
+            { next: { revalidate: 3600 } }
+          );
+          if (res.ok) {
+            const data = await res.json();
+            for (const ipo of (data.ipoCalendar || []).slice(0, 30)) {
+              if (!ipo.date) continue;
+              const symbol = normalizeYahooSymbol(String(ipo.symbol || ""));
+              events.push({
+                id: `ipo-fh-${symbol || ipo.name}-${ipo.date}`,
+                date: ipo.date,
+                ...(symbol && !isExcludedInstrument(symbol) ? { symbol } : {}),
+                title: ipo.name || `IPO ${symbol}`,
+                type: "ipo",
+                region: "US",
+                detail: [ipo.exchange, ipo.price, ipo.status].filter(Boolean).join(" · ") || undefined,
+                source: "finnhub",
+              });
+            }
+          }
+        } catch {
+          /* */
         }
       }
     }
@@ -166,7 +244,8 @@ export async function GET(req: NextRequest) {
             const fromWide = fromT - 90 * 86400000;
             for (const d of list.slice(0, 200)) {
               const dateStr = (d.delistedDate || d.date || "").slice(0, 10);
-              if (!dateStr || !d.symbol) continue;
+              const symbol = normalizeYahooSymbol(String(d.symbol || ""));
+              if (!dateStr || !symbol || isExcludedInstrument(symbol)) continue;
               const t0 = new Date(dateStr + "T12:00:00").getTime();
               if (t0 < fromWide || t0 > toT) continue;
               const kind = String(d.exchange || d.assetType || "").toLowerCase();
@@ -174,10 +253,10 @@ export async function GET(req: NextRequest) {
               if (kind.includes("etf") || String(d.symbol).includes("ETF")) label = "ETF";
               if (kind.includes("fund")) label = "Fondo";
               events.push({
-                id: `delist-${d.symbol}-${dateStr}`,
+                id: `delist-${symbol}-${dateStr}`,
                 date: dateStr,
-                symbol: d.symbol,
-                title: `Desliste ${label}: ${d.symbol}`,
+                symbol,
+                title: `Desliste ${label}: ${symbol}`,
                 type: "delisting",
                 region: "US",
                 detail: [d.companyName || d.name, d.exchange]
@@ -225,8 +304,10 @@ export async function GET(req: NextRequest) {
       events,
       count: events.length,
       sources: [
-        finnhub && "finnhub",
-        fmp && "fmp",
+        "nasdaq-public",
+        "sec-edgar",
+        finnhub && "finnhub-fallback",
+        fmp && "fmp-fallback",
         "reference",
       ].filter(Boolean),
     });

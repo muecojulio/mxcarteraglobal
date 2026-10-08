@@ -5,6 +5,7 @@
  */
 
 import type { SicItem } from "./sic-catalog";
+import { normalizeYahooSymbol } from "./market-data/types";
 
 type MxDiv = {
   symbol: string;
@@ -119,6 +120,15 @@ export const DIV_SIC_STOCKS: SicItem[] = [
   { symbol: "HON", name: "Honeywell · div", kind: "stock", region: "US" },
   { symbol: "IBM", name: "IBM · div", kind: "stock", region: "US" },
   { symbol: "TXN", name: "Texas Instruments · div", kind: "stock", region: "US" },
+  { symbol: "BP", name: "BP ADR · div", kind: "stock", region: "US" },
+  { symbol: "BBD", name: "Bradesco ADR · div", kind: "stock", region: "LATAM" },
+  { symbol: "CAG", name: "Conagra Brands · div", kind: "stock", region: "US" },
+  { symbol: "MPW", name: "Medical Properties Trust · div", kind: "stock", region: "US" },
+  { symbol: "KMI", name: "Kinder Morgan · div", kind: "stock", region: "US" },
+  { symbol: "PBR-A", name: "Petrobras preferred ADR · div", kind: "stock", region: "LATAM" },
+  { symbol: "VICI", name: "VICI Properties · div", kind: "stock", region: "US" },
+  { symbol: "SWK", name: "Stanley Black & Decker · div", kind: "stock", region: "US" },
+  { symbol: "IBE.MC", name: "Iberdrola · div", kind: "stock", region: "EU" },
 ];
 
 /** 50 ETFs que distribuyen (US/SIC + UCITS Dist, no acumulación pura) */
@@ -164,6 +174,10 @@ export const DIV_ETFS: SicItem[] = [
   { symbol: "TIP", name: "iShares TIPS · dist", kind: "etf", region: "US" },
   { symbol: "EMB", name: "iShares EM Bond · dist", kind: "etf", region: "US" },
   { symbol: "PFF", name: "iShares Preferred · dist", kind: "etf", region: "US" },
+  { symbol: "ALTY", name: "Global X Alternative Income · dist", kind: "etf", region: "US" },
+  { symbol: "PFFD", name: "Global X U.S. Preferred · dist", kind: "etf", region: "US" },
+  { symbol: "SRET", name: "Global X SuperDividend REIT · dist", kind: "etf", region: "US" },
+  { symbol: "FDD", name: "First Trust STOXX European Select Dividend · dist", kind: "etf", region: "US" },
   { symbol: "VUSA", name: "Vanguard S&P 500 UCITS Dist", kind: "etf", region: "GLOBAL" },
   { symbol: "VWRD", name: "Vanguard FTSE All-World UCITS Dist", kind: "etf", region: "GLOBAL" },
   { symbol: "VWRL", name: "Vanguard FTSE All-World UCITS Dist GBP", kind: "etf", region: "GLOBAL" },
@@ -184,8 +198,9 @@ export const DIVIDEND_SYMBOLS = new Set(
 );
 
 export function paysDividend(symbol: string): boolean {
-  const s = symbol.toUpperCase().replace(/\.MX$/, "");
-  if (DIVIDEND_SYMBOLS.has(s) || DIVIDEND_SYMBOLS.has(symbol.toUpperCase())) {
+  const canonical = normalizeYahooSymbol(symbol);
+  const s = canonical.toUpperCase().replace(/\.MX$/, "");
+  if (DIVIDEND_SYMBOLS.has(s) || DIVIDEND_SYMBOLS.has(canonical.toUpperCase())) {
     return true;
   }
   // FIBRAs mexicanas deben distribuir ~95% del resultado fiscal

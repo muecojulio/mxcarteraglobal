@@ -5,20 +5,18 @@ import type {
   IndexQuote,
 } from "./types";
 import { detectRegion, detectCurrency } from "./types";
-import { MockProvider } from "./mock-provider";
 
 const BASE = "https://finnhub.io/api/v1";
 
 /**
  * Proveedor Finnhub (plan gratuito).
  * - Excelente cobertura EE.UU.
- * - Símbolos .MX no disponibles en free → se usa mock automáticamente
+ * - Símbolos .MX no disponibles en free → devuelve null para seguir la cadena pública/fallback
  * - Dividendos históricos requieren plan de pago
  */
 export class FinnhubProvider implements MarketDataProvider {
   name = "finnhub";
   private apiKey: string;
-  private mock = new MockProvider();
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
@@ -51,10 +49,8 @@ export class FinnhubProvider implements MarketDataProvider {
     const sym = symbol.toUpperCase();
     const region = detectRegion(sym);
 
-    // Finnhub free no cubre bien BMV (.MX) → mock
-    if (region === "MX" || sym.endsWith(".MX")) {
-      return this.mock.getQuote(sym);
-    }
+    // Finnhub free no cubre BMV; deja el fallback local a DataBursatil/Yahoo.
+    if (region === "MX" || sym.endsWith(".MX")) return null;
 
     const quoteData = await this.fetchJson<{
       c: number;
@@ -116,9 +112,7 @@ export class FinnhubProvider implements MarketDataProvider {
       }>;
     }>("/search", { q: query });
 
-    if (!data?.result?.length) {
-      return this.mock.search(query);
-    }
+    if (!data?.result?.length) return [];
 
     return data.result.slice(0, 15).map((r) => {
       const region = detectRegion(r.symbol);
@@ -133,8 +127,7 @@ export class FinnhubProvider implements MarketDataProvider {
   }
 
   async getIndices(): Promise<IndexQuote[]> {
-    // En free tier los índices con ^ a veces fallan; usamos mock fiable
-    // y opcionalmente intentamos algunos ETFs que siguen índices
+    // Finnhub puede no cubrir índices de forma consistente; se usan ETFs como proxy.
     const etfProxies: { symbol: string; name: string; region: "US" | "MX" }[] = [
       { symbol: "SPY", name: "S&P 500 (SPY)", region: "US" },
       { symbol: "QQQ", name: "Nasdaq 100 (QQQ)", region: "US" },
@@ -157,14 +150,6 @@ export class FinnhubProvider implements MarketDataProvider {
       }
     }
 
-    if (live.length > 0) {
-      // Añadir IPC mock para México
-      const mockIdx = await this.mock.getIndices();
-      const ipc = mockIdx.find((i) => i.region === "MX");
-      if (ipc) live.push(ipc);
-      return live;
-    }
-
-    return this.mock.getIndices();
+    return live;
   }
 }

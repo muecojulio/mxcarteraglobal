@@ -1,82 +1,69 @@
 # MarketPulse
 
-Seguimiento de mercados — **México · EE.UU. · Mundiales** · 100% gratuita · PWA multiplataforma
+Seguimiento de mercados — **México · EE.UU. · mercados globales** · PWA multiplataforma.
 
-## Enlace y código QR
+## Fuentes de datos financieros
 
-Abre **`/install`** en la app (Más → Instalar / QR):
+La app intenta primero las fuentes públicas que no requieren API key ni registro:
 
-- Enlace para copiar o compartir
-- Código QR para escanear con otro teléfono
-- Instrucciones por dispositivo
+| Datos | Fuente primaria pública | Alternativa si falta o falla |
+|---|---|---|
+| Precios, histórico, métricas y dividendos | Yahoo Finance (endpoints públicos/no oficiales) | Finnhub, Polygon/Massive, Finage, DataBursatil o Twelve Data configurados en el servidor |
+| Cotizaciones/calendario/screener Nasdaq | Nasdaq public endpoints | Yahoo; luego proveedores con variables de entorno |
+| Cotizaciones de respaldo | TradingView Scanner API pública/no oficial | Proveedores con variables de entorno |
+| Fundamentales y filings de compañías | SEC EDGAR CompanyFacts / submissions | Métricas de Yahoo y proveedores configurados |
+| Tasa Treasury de referencia | FRED public CSV; U.S. Treasury Fiscal Data | Yahoo ^IRX y, al final, estimación etiquetada |
 
-Cuando publiques la app (ej. `https://tudominio.com`), el QR apuntará a esa URL automáticamente.
+Las rutas de datos son **server-side**: las claves existentes nunca se envían al navegador. Si ninguna fuente confirma un precio, la app deja el dato vacío; no genera cotizaciones aleatorias. Forex y criptomonedas no forman parte del universo de búsqueda, métricas, screener ni análisis bursátil. El conversor de moneda de la cartera es una función independiente.
 
-## Instalar en cualquier dispositivo
+La ficha de activo, dividendos, métricas, screener, calendario de IPO y tasa libre de riesgo usan estas fuentes. El catálogo incluye los ETFs/acciones solicitados y normaliza alias como `SRET1 → SRET`, `BP N → BP`, `PBRA N → PBR-A`, `IBE N → IBE.MC`, `BBD N → BBD` y `KOFUBl → KOFUBL.MX`.
 
-| Dispositivo | Cómo instalar |
-|-------------|---------------|
-| **iPhone / iPad** | Safari → botón Compartir → **Añadir a pantalla de inicio** |
-| **Android** | Chrome → menú ⋮ → **Instalar app** / Añadir a inicio |
-| **Windows / Mac / Linux** | Chrome o Edge → icono de instalar en la barra de direcciones (o menú → Instalar MarketPulse) |
-| **Safari Mac** | Archivo → Añadir al Dock |
+Ver detalles, límites y atribución en **[docs/FUENTES_FINANCIERAS.md](./docs/FUENTES_FINANCIERAS.md)**.
 
-Requisitos: abrir la app por **HTTPS** o **localhost**. El service worker y el `manifest.webmanifest` ya están configurados (`display: standalone`, orientación libre para iPad y PC).
+## Variables opcionales de respaldo
 
-## Datos reales
+No necesitas configurar ninguna para usar las fuentes públicas. Si ya tienes claves, se leen únicamente como fallback desde `.env.local` o el entorno de despliegue:
 
-| Dato | Fuente |
-|------|--------|
-| Precios EE.UU. | Finnhub |
-| Precios México | DataBursatil |
-| Internacional | Yahoo |
-| Dividendos US | FMP |
-| Dividendos MX | DataBursatil |
+```env
+FINNHUB_API_KEY=
+DATABURSATIL_TOKEN=
+FMP_API_KEY=
+POLYGON_API_KEY=
+MASSIVE_API_KEY=
+FINAGE_API_KEY=
+ALPHA_VANTAGE_API_KEY=
+TWELVEDATA_API_KEY=
+SEC_USER_AGENT=
+```
+
+`SEC_USER_AGENT` es opcional (no es una API key); si se define, usa un identificador de app y un email de contacto válido para cumplir mejor las directrices de SEC EDGAR. Copia `.env.example` como base. No subas `.env.local` a GitHub.
 
 ## Ejecutar
 
 ```bash
-cd marketpulse
 npm install
 npm run dev
 ```
 
-Abre http://localhost:3000
+Abre http://localhost:3000.
 
-Para probar instalación en el móvil: misma Wi‑Fi y la IP `Network` que muestra Next.js (http://192.168.x.x:3000).
+## Instalar / compartir
 
+Abre **`/install`** en la app (Más → Instalar / QR) para copiar el enlace, compartir el QR o consultar las instrucciones.
 
-## Publicar en internet (HTTPS)
+| Dispositivo | Cómo instalar |
+|---|---|
+| iPhone / iPad | Safari → Compartir → Añadir a pantalla de inicio |
+| Android | Chrome → menú ⋮ → Instalar app / Añadir a inicio |
+| Windows / Mac / Linux | Chrome o Edge → icono de instalación / menú → Instalar MarketPulse |
+| Safari Mac | Archivo → Añadir al Dock |
 
-Guía completa: ver **[DEPLOY.md](./DEPLOY.md)**
+Requisito: HTTPS o localhost. El service worker y `manifest.webmanifest` ya están configurados.
 
-Resumen rápido con Vercel (gratis):
-1. Cuenta en https://vercel.com
-2. Sube el proyecto `marketpulse`
-3. Añade las variables de entorno (API keys)
-4. Usa la URL `https://….vercel.app` — el QR en `/install` apuntará a ella
+## Publicar
 
+Guía: **[DEPLOY.md](./DEPLOY.md)**. En Vercel, las variables anteriores son opcionales; no hace falta añadir API keys para el flujo público.
 
-## Alpha Vantage (métricas)
+## Análisis y datos propios
 
-1. Key gratis: https://www.alphavantage.co/support/#api-key
-2. En `.env.local`:
-   ```
-   ALPHA_VANTAGE_API_KEY=tu_clave
-   ```
-3. Se usa en `/api/metrics` (OVERVIEW) con caché 24h. Free: ~25 llamadas/día.
-
-
-## Polygon (respaldo US)
-
-1. Key gratis: https://polygon.io/dashboard/signup (o Massive)
-2. `.env.local`: `POLYGON_API_KEY=tu_clave`
-3. Cadena cotizaciones US: **Finnhub → Polygon → Yahoo → mock**
-4. Free: ~5 req/min, datos con delay ~15 min
-
-
-## Finage
-
-1. Key: https://finage.co.uk (registro gratis)
-2. `.env.local`: `FINAGE_API_KEY=tu_clave`
-3. Cadena US: **Finnhub → Polygon → Finage → Yahoo**
+El análisis de activo usa reglas deterministas y datos públicos junto con los cálculos de cartera que permanecen en el dispositivo. No depende de una IA externa ni transmite la cartera a un proveedor de IA; no es asesoramiento de inversión. Los campos ausentes se dejan como no disponibles, no se inventan.

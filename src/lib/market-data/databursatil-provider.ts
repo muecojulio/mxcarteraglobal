@@ -33,6 +33,8 @@ const SYMBOL_MAP: Record<string, string> = {
   "KIMBERA.MX": "KIMBERA",
   "PE&OLES.MX": "PENOLES*",
   "PENOLES.MX": "PENOLES*",
+  "KOFUBL.MX": "KOFUBL",
+  KOFUBL: "KOFUBL",
 };
 
 const NAME_MAP: Record<string, string> = {
@@ -48,6 +50,7 @@ const NAME_MAP: Record<string, string> = {
   "ALSEA*": "Alsea",
   KIMBERA: "Kimberly-Clark de México",
   "PENOLES*": "Peñoles",
+  KOFUBL: "Coca-Cola FEMSA",
 };
 
 function toDbSymbol(symbol: string): string {

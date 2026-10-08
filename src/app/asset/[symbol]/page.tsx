@@ -410,6 +410,13 @@ export default function AssetPage() {
       quarter?: number;
     }>;
     dividends: Array<{ date: string; amount: number }>;
+    sec?: {
+      cik: string;
+      name: string;
+      source: string;
+      filings: Array<{ date: string; form: string; accession: string; document?: string }>;
+    } | null;
+    dataSources?: Record<string, string | null>;
     assetType?: string;
   } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -717,6 +724,38 @@ export default function AssetPage() {
                       <p className="text-[11px] text-muted">Ingreso neto</p>
                     </div>
                   </div>
+                )}
+              </section>
+            )}
+
+            {data?.sec && (
+              <section className="bg-card rounded-xl border border-border p-4 mb-4">
+                <h2 className="text-sm font-semibold mb-1">Filings y estados SEC EDGAR</h2>
+                <p className="text-xs text-muted mb-3">
+                  {data.sec.name} · CIK {data.sec.cik} · datos públicos XBRL
+                </p>
+                {data.sec.filings.length > 0 ? (
+                  <ul className="space-y-2">
+                    {data.sec.filings.slice(0, 5).map((filing) => {
+                      const documentUrl = filing.document
+                        ? `https://www.sec.gov/Archives/edgar/data/${Number(data.sec!.cik)}/${filing.accession.replaceAll("-", "")}/${encodeURIComponent(filing.document)}`
+                        : `https://www.sec.gov/edgar/browse/?CIK=${encodeURIComponent(data.sec!.cik)}`;
+                      return (
+                        <li key={`${filing.accession}-${filing.form}`}>
+                          <a
+                            href={documentUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs text-primary hover:underline"
+                          >
+                            {filing.form} · {filing.date}
+                          </a>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-muted">Filings recientes no disponibles en este momento.</p>
                 )}
               </section>
             )}
@@ -1183,6 +1222,48 @@ export default function AssetPage() {
                       : "—"}
                   </span>
                 </div>
+                {data?.stats?.pb != null && (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted">Relación P/B</span>
+                    <span className="font-medium">{fmt(Number(data.stats.pb), 2)}</span>
+                  </div>
+                )}
+                {data?.stats?.ps != null && (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted">Relación P/S</span>
+                    <span className="font-medium">{fmt(Number(data.stats.ps), 2)}</span>
+                  </div>
+                )}
+                {data?.stats?.roe != null && (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted">ROE</span>
+                    <span className="font-medium">{fmt(Number(data.stats.roe), 2)}%</span>
+                  </div>
+                )}
+                {data?.stats?.roa != null && (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted">ROA</span>
+                    <span className="font-medium">{fmt(Number(data.stats.roa), 2)}%</span>
+                  </div>
+                )}
+                {data?.stats?.roi != null && (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted">ROI</span>
+                    <span className="font-medium">{fmt(Number(data.stats.roi), 2)}%</span>
+                  </div>
+                )}
+                {data?.stats?.currentRatio != null && (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted">Razón corriente</span>
+                    <span className="font-medium">{fmt(Number(data.stats.currentRatio), 2)}</span>
+                  </div>
+                )}
+                {data?.stats?.debtEquity != null && (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted">Deuda / patrimonio</span>
+                    <span className="font-medium">{fmt(Number(data.stats.debtEquity), 2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between gap-2">
                   <span className="text-muted">Cap. bursátil</span>
                   <span className="font-medium">
@@ -1221,6 +1302,12 @@ export default function AssetPage() {
                 ticker (muy común en P/E y capitalización de ETFS y emisoras
                 MX). El yield se estima con los dividendos recientes si no
                 viene directo.
+              </p>
+              <p className="text-[10px] text-muted mt-2">
+                Fuentes: {Object.entries(data?.dataSources || {})
+                  .filter((entry): entry is [string, string] => Boolean(entry[1]))
+                  .map(([key, source]) => `${key}: ${source}`)
+                  .join(" · ") || "sin datos confirmados"}
               </p>
             </section>
 

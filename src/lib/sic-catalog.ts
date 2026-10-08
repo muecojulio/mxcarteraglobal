@@ -5,6 +5,8 @@
  * más una base amplia de ETFs y acciones globales habituales en el SIC.
  */
 
+import { normalizeYahooSymbol } from "./market-data/types";
+
 export type SicKind = "stock" | "etf";
 
 export type SicItem = {
@@ -418,6 +420,11 @@ export const SIC_STOCKS: SicItem[] = [
   { symbol: "ZBH", name: "Zimmer Biomet", kind: "stock", region: "US" },
   { symbol: "ZBRA", name: "Zebra Technologies", kind: "stock", region: "US" },
   { symbol: "ZTS", name: "Zoetis", kind: "stock", region: "US" },
+  { symbol: "CAG", name: "Conagra Brands", kind: "stock", region: "US" },
+  { symbol: "MPW", name: "Medical Properties Trust", kind: "stock", region: "US" },
+  { symbol: "VICI", name: "VICI Properties", kind: "stock", region: "US" },
+  { symbol: "PBR-A", name: "Petrobras preferred ADR", kind: "stock", region: "LATAM" },
+  { symbol: "IBE.MC", name: "Iberdrola", kind: "stock", region: "EU" },
 ];
 
 export const SIC_ETFS: SicItem[] = [
@@ -597,6 +604,11 @@ export const SIC_ETFS: SicItem[] = [
   { symbol: "DIVO", name: "Amplify CWP Enhanced Dividend Income", kind: "etf", region: "US" },
   { symbol: "XYLD", name: "Global X S&P 500 Covered Call", kind: "etf", region: "US" },
   { symbol: "RYLD", name: "Global X Russell 2000 Covered Call", kind: "etf", region: "US" },
+  { symbol: "ALTY", name: "Global X Alternative Income ETF", kind: "etf", region: "US" },
+  { symbol: "PFFD", name: "Global X U.S. Preferred ETF", kind: "etf", region: "US" },
+  { symbol: "SRET", name: "Global X SuperDividend REIT ETF", kind: "etf", region: "US" },
+  { symbol: "SPHD", name: "Invesco S&P 500 High Dividend Low Volatility ETF", kind: "etf", region: "US" },
+  { symbol: "FDD", name: "First Trust STOXX European Select Dividend ETF", kind: "etf", region: "US" },
 ];
 
 export const SIC_UCITS: SicItem[] = [
@@ -802,7 +814,9 @@ export const SIC_UCITS: SicItem[] = [
 export const SIC_ALL: SicItem[] = [...SIC_STOCKS, ...SIC_ETFS, ...SIC_UCITS];
 
 export function searchSic(q: string, kind?: SicKind | "ALL" | "ucits"): SicItem[] {
-  const needle = q.trim().toUpperCase();
+  const rawNeedle = q.trim().toUpperCase();
+  const canonicalNeedle = normalizeYahooSymbol(rawNeedle);
+  const needles = [...new Set([rawNeedle, canonicalNeedle])];
   const pool =
     kind === "stock"
       ? SIC_STOCKS
@@ -811,15 +825,17 @@ export function searchSic(q: string, kind?: SicKind | "ALL" | "ucits"): SicItem[
       : kind === "ucits"
       ? SIC_UCITS
       : SIC_ALL;
-  if (!needle) return pool;
-  return pool.filter(
-    (i) =>
-      i.symbol.toUpperCase().includes(needle) ||
-      i.name.toUpperCase().includes(needle)
+  if (!rawNeedle) return pool;
+  return pool.filter((item) =>
+    needles.some(
+      (needle) =>
+        item.symbol.toUpperCase().includes(needle) ||
+        item.name.toUpperCase().includes(needle)
+    )
   );
 }
 
 export function isSicSymbol(symbol: string): boolean {
-  const s = symbol.toUpperCase().replace(/\.MX$/, "");
+  const s = normalizeYahooSymbol(symbol).replace(/\.MX$/, "");
   return SIC_ALL.some((i) => i.symbol.toUpperCase() === s);
 }

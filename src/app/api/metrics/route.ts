@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { freeYahooSummary } from "@/lib/free-finance";
+import { detectRegion, isExcludedInstrument, normalizeYahooSymbol } from "@/lib/market-data/types";
+import { getMarketDataProvider } from "@/lib/market-data";
 
 export const dynamic = "force-dynamic";
 
@@ -7,8 +10,8 @@ const UNIVERSE: Array<{
   symbol: string;
   name: string;
   type: "stock" | "etf";
-  region: "US" | "MX";
-  currency: "USD" | "MXN";
+  region: "US" | "MX" | "GLOBAL";
+  currency: string;
 }> = [
   { symbol: "AAPL", name: "Apple", type: "stock", region: "US", currency: "USD" },
   { symbol: "MSFT", name: "Microsoft", type: "stock", region: "US", currency: "USD" },
@@ -53,14 +56,36 @@ const UNIVERSE: Array<{
   { symbol: "DANHOS13.MX", name: "Fibra Danhos", type: "etf", region: "MX", currency: "MXN" },
   { symbol: "FIBRAPL14.MX", name: "Fibra Prologis", type: "etf", region: "MX", currency: "MXN" },
   { symbol: "FHIPO14.MX", name: "Fibra Hipotecaria", type: "etf", region: "MX", currency: "MXN" },
+  { symbol: "ALTY", name: "Global X Alternative Income", type: "etf", region: "US", currency: "USD" },
+  { symbol: "PFFD", name: "Global X U.S. Preferred", type: "etf", region: "US", currency: "USD" },
+  { symbol: "QYLD", name: "Global X Nasdaq 100 Covered Call", type: "etf", region: "US", currency: "USD" },
+  { symbol: "SRET", name: "Global X SuperDividend REIT", type: "etf", region: "US", currency: "USD" },
+  { symbol: "SPYD", name: "SPDR S&P 500 High Dividend", type: "etf", region: "US", currency: "USD" },
+  { symbol: "NOBL", name: "ProShares Dividend Aristocrats", type: "etf", region: "US", currency: "USD" },
+  { symbol: "SPHD", name: "Invesco S&P 500 High Dividend Low Volatility", type: "etf", region: "US", currency: "USD" },
+  { symbol: "PFF", name: "iShares Preferred and Income Securities", type: "etf", region: "US", currency: "USD" },
+  { symbol: "HDV", name: "iShares Core High Dividend", type: "etf", region: "US", currency: "USD" },
+  { symbol: "FDD", name: "First Trust STOXX European Select Dividend", type: "etf", region: "US", currency: "USD" },
+  { symbol: "BP", name: "BP ADR", type: "stock", region: "US", currency: "USD" },
+  { symbol: "PFE", name: "Pfizer", type: "stock", region: "US", currency: "USD" },
+  { symbol: "MO", name: "Altria", type: "stock", region: "US", currency: "USD" },
+  { symbol: "CAG", name: "Conagra Brands", type: "stock", region: "US", currency: "USD" },
+  { symbol: "MPW", name: "Medical Properties Trust", type: "stock", region: "US", currency: "USD" },
+  { symbol: "KMI", name: "Kinder Morgan", type: "stock", region: "US", currency: "USD" },
+  { symbol: "PBR-A", name: "Petrobras preferred ADR", type: "stock", region: "US", currency: "USD" },
+  { symbol: "VICI", name: "VICI Properties", type: "stock", region: "US", currency: "USD" },
+  { symbol: "SWK", name: "Stanley Black & Decker", type: "stock", region: "US", currency: "USD" },
+  { symbol: "IBE.MC", name: "Iberdrola", type: "stock", region: "GLOBAL", currency: "EUR" },
+  { symbol: "BBD", name: "Bradesco ADR", type: "stock", region: "US", currency: "USD" },
+  { symbol: "KOFUBL.MX", name: "Coca-Cola FEMSA", type: "stock", region: "MX", currency: "MXN" },
 ];
 
 type MetricsRow = {
   symbol: string;
   name: string;
   type: "stock" | "etf";
-  region: "US" | "MX";
-  currency: "USD" | "MXN";
+  region: "US" | "MX" | "GLOBAL";
+  currency: string;
   price: number | null;
   priceMxn: number | null;
   pe: number | null;
@@ -77,6 +102,21 @@ type MetricsRow = {
   dividendFrequency: string | null;
   undervalued: boolean | null;
 };
+
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const result = new Array<R>(items.length);
+  let cursor = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (true) {
+        const index = cursor++;
+        if (index >= items.length) return;
+        result[index] = await fn(items[index]);
+      }
+    })
+  );
+  return result;
+}
 
 function num(v: unknown): number | null {
   if (v == null || v === "") return null;
@@ -197,7 +237,7 @@ function mergeMetrics(
 }
 
 
-async function fetchUsdMxn(): Promise<number> {
+async function fetchUsdMxn(): Promise<number | null> {
   try {
     const res = await fetch(
       "https://api.frankfurter.dev/v1/latest?base=USD&symbols=MXN",
@@ -221,7 +261,7 @@ async function fetchUsdMxn(): Promise<number> {
   } catch {
     /* */
   }
-  return 17;
+  return null;
 }
 
 async function finnhubMetrics(
@@ -338,9 +378,15 @@ export async function GET(req: NextRequest) {
   const fmp = process.env.FMP_API_KEY?.trim();
   const usdMxn = await fetchUsdMxn();
 
-  let list = UNIVERSE.filter((u) =>
-    type === "all" ? true : u.type === type
-  );
+  const list = UNIVERSE
+    .filter((item) => type === "all" || item.type === type)
+    .filter((item) => !isExcludedInstrument(item.symbol))
+    .map((item) => ({
+      ...item,
+      symbol: normalizeYahooSymbol(item.symbol),
+      region: detectRegion(item.symbol),
+    }));
+  const publicSummaries = await mapLimit(list, 6, (item) => freeYahooSummary(item.symbol));
 
   // Aplicar presets de filtros si no hay params explícitos
   let filters = {
@@ -385,59 +431,61 @@ export async function GET(req: NextRequest) {
 
   const rows: MetricsRow[] = [];
 
-  // Secuencial suave para no saturar free tier
-  for (const u of list) {
-    let partial: Partial<MetricsRow> = {};
-    if (u.region === "US" && finnhub) {
-      partial = await finnhubMetrics(u.symbol, finnhub);
-      // completar huecos con FMP
-      if (fmp && (partial.pe == null || partial.pb == null)) {
-        const f = await fmpRatios(u.symbol, fmp);
-        partial = mergeMetrics(partial, f);
+  // Yahoo público primero; las variables de entorno solo completan los huecos.
+  for (let index = 0; index < list.length; index++) {
+    const u = list[index];
+    const yahoo = publicSummaries[index];
+    let partial: Partial<MetricsRow> = {
+      price: yahoo.price,
+      pe: yahoo.pe,
+      peg: yahoo.peg,
+      pb: yahoo.pb,
+      ps: yahoo.ps,
+      roe: yahoo.roe,
+      roa: yahoo.roa,
+      roi: yahoo.roi,
+      revGrowth: yahoo.revGrowth,
+      epsGrowth: yahoo.epsGrowth,
+      divYield: yahoo.divYield,
+      divYieldPct: yahoo.divYield,
+    };
+
+    if (u.region === "US") {
+      if (
+        finnhub &&
+        (partial.pe == null || partial.roe == null || partial.divYieldPct == null)
+      ) {
+        const fallback = await finnhubMetrics(u.symbol, finnhub);
+        partial = mergeMetrics(partial, fallback);
       }
-      // Alpha Vantage OVERVIEW: PEG y huecos (máx ~20/día, cache 24h)
+      if (fmp && (partial.pe == null || partial.pb == null)) {
+        const fallback = await fmpRatios(u.symbol, fmp);
+        partial = mergeMetrics(partial, fallback);
+      }
+      // Alpha Vantage es último respaldo con cuota pequeña y caché de 24 horas.
       const avKey = process.env.ALPHA_VANTAGE_API_KEY?.trim();
       if (
         avKey &&
         avBudgetOk() &&
-        (partial.peg == null ||
-          partial.pe == null ||
-          partial.roe == null ||
-          partial.divYieldPct == null)
+        (partial.peg == null || partial.pe == null || partial.roe == null || partial.divYieldPct == null)
       ) {
-        const av = await alphaVantageOverview(u.symbol, avKey);
-        const freq = av.dividendFrequency;
-        partial = mergeMetrics(partial, av);
-        if (freq && !partial.dividendFrequency) {
-          // dividendFrequency se aplica más abajo desde partial extendido
-          (partial as MetricsRow).dividendFrequency = freq;
+        const fallback = await alphaVantageOverview(u.symbol, avKey);
+        const frequency = fallback.dividendFrequency;
+        partial = mergeMetrics(partial, fallback);
+        if (frequency && !partial.dividendFrequency) {
+          partial.dividendFrequency = frequency;
         }
       }
-    } else if (u.region === "MX") {
-      // Precio vía nuestro quote interno si es posible
+    }
+
+    // Si Yahoo summary no publicó precio, el composite prueba las APIs públicas
+    // de Nasdaq/TradingView y, después, los proveedores con claves configuradas.
+    if (partial.price == null) {
       try {
-        const base =
-          process.env.VERCEL_URL != null
-            ? `https://${process.env.VERCEL_URL}`
-            : "http://127.0.0.1:3000";
-        // usar DataBursatil / composite a través de finnhub no sirve para .MX
-        // Dejamos métricas null; precio se intenta con Yahoo
-        const yRes = await fetch(
-          `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
-            u.symbol
-          )}?interval=1d&range=1d`,
-          {
-            headers: { "User-Agent": "Mozilla/5.0" },
-            next: { revalidate: 120 },
-          }
-        );
-        if (yRes.ok) {
-          const yd = await yRes.json();
-          const price = yd?.chart?.result?.[0]?.meta?.regularMarketPrice;
-          partial.price = num(price);
-        }
+        const quote = await getMarketDataProvider().getQuote(u.symbol);
+        if (quote) partial.price = quote.price;
       } catch {
-        /* */
+        // La fila conserva null: nunca se inventa un precio.
       }
     }
 
@@ -446,8 +494,10 @@ export async function GET(req: NextRequest) {
       price == null
         ? null
         : u.currency === "MXN"
-        ? price
-        : price * usdMxn;
+          ? price
+          : u.currency === "USD" && usdMxn != null
+            ? price * usdMxn
+            : null;
 
     const pe = partial.pe ?? null;
     const pb = partial.pb ?? null;
@@ -461,14 +511,14 @@ export async function GET(req: NextRequest) {
       undervalued = Boolean(peOk || (pbOk && psOk) || (peOk && pbOk));
     }
 
-    // Frecuencia aproximada por yield ETFs conocidos / acciones
+    // Frecuencia aproximada; los calendarios de pago pueden cambiar.
     let dividendFrequency: string | null = null;
     if (u.type === "etf") {
-      if (["O", "JEPI"].includes(u.symbol) || u.symbol === "O")
-        dividendFrequency = u.symbol === "O" || u.symbol === "JEPI" ? "Mensual" : null;
-      if (["SCHD", "VIG", "SPY", "QQQ", "VTI", "VOO"].includes(u.symbol))
+      if (["ALTY", "PFFD", "QYLD", "SRET", "SPHD", "PFF", "JEPI", "JEPQ"].includes(u.symbol)) {
+        dividendFrequency = "Mensual";
+      } else if (["SCHD", "VIG", "SPY", "QQQ", "VTI", "VOO", "SPYD", "NOBL", "HDV", "FDD"].includes(u.symbol)) {
         dividendFrequency = "Trimestral";
-      if (u.symbol === "JEPI" || u.symbol === "O") dividendFrequency = "Mensual";
+      }
     } else if ((partial.divYieldPct ?? 0) > 0) {
       dividendFrequency = "Trimestral (típ.)";
     }
@@ -548,7 +598,19 @@ export async function GET(req: NextRequest) {
       configured: Boolean(process.env.ALPHA_VANTAGE_API_KEY?.trim()),
     },
     results: rows,
+    sources: {
+      primary: ["Yahoo Finance (público, sin API key)"],
+      fallback: [
+        ...(finnhub ? ["Finnhub"] : []),
+        ...(fmp ? ["FMP"] : []),
+        ...(process.env.ALPHA_VANTAGE_API_KEY?.trim() ? ["Alpha Vantage"] : []),
+        ...(process.env.DATABURSATIL_TOKEN?.trim() ? ["DataBursatil"] : []),
+        ...(process.env.TWELVEDATA_API_KEY?.trim() ? ["Twelve Data"] : []),
+      ],
+      treasury: "No usado para valoraciones; consultar /api/public-finance y /api/risk-free.",
+    },
     note:
-      "US: Finnhub + FMP + Alpha Vantage (OVERVIEW, cache 24h, cupo diario). MX: precio Yahoo. No es consejo de inversión.",
+      "Yahoo público primero; Finnhub/FMP/Alpha Vantage y proveedores con token completan datos faltantes. Forex/cripto no forman parte del universo. El análisis no es recomendación de inversión.",
+    usingRealData: rows.some((row) => row.price != null || row.pe != null || row.pb != null || row.roe != null),
   });
 }
