@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useQuotes } from "@/lib/market-data/client";
 import { loadPositions, savePositions, loadWatchlist, loadPrefs, savePrefs, type Position } from "@/lib/persist";
 import { LiveBadge } from "@/components/LiveBadge";
+import { AnimatedNumber } from "@/components/AnimatedNumber";
 import type { Quote } from "@/lib/market-data/types";
 import { useUsdMxn, toDisplay } from "@/lib/fx";
 import { PortfolioEvents } from "@/components/PortfolioEvents";
@@ -308,10 +309,15 @@ export default function PortfolioPage() {
           <p className="text-[11px] text-muted uppercase tracking-wider text-center mb-1">
             Valor de mercado
           </p>
-          <p className="text-3xl font-bold tracking-tight text-center">
-            {loading
-              ? "…"
-              : formatMoney(summary.totalValue, displayCurrency)}
+          <p className="text-3xl font-bold tracking-tight text-center tabular-nums">
+            {loading ? (
+              "…"
+            ) : (
+              <AnimatedNumber
+                value={summary.totalValue}
+                format={(n) => formatMoney(n, displayCurrency)}
+              />
+            )}
           </p>
           <p
             className={`text-center text-sm font-medium mt-1.5 ${

@@ -170,7 +170,18 @@ body {
 
 .bg-card {
   border-radius: var(--radius-lg) !important;
-  box-shadow: var(--shadow-soft);
+  box-shadow: var(--shadow-soft), inset 0 1px 0 var(--card-hilite);
+  transition: box-shadow var(--ui-duration) var(--ui-ease),
+    transform var(--ui-duration) var(--ui-ease),
+    border-color var(--ui-duration) var(--ui-ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  a.bg-card:hover,
+  button.bg-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 28px color-mix(in srgb, var(--foreground) 14%, transparent),
+      inset 0 1px 0 var(--card-hilite);
+  }
 }
 
 .app-shell {
@@ -415,3 +426,320 @@ button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
 .ui-swipe__actions { position: absolute; right: 0; top: 0; bottom: 0; width: 104px; display: flex; align-items: center; justify-content: center; background: var(--secondary); }
 .ui-swipe__toggle { display: block; margin-left: auto; padding: 0 1rem; font-size: .75rem; text-decoration: underline; text-underline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) { .ui-swipe__content { transition: none; } }
+
+/* ═══════════════════════════════════════════
+   Capa "viva" — profundidad y movimiento sereno
+   Ideas adaptadas de repositorios públicos:
+   magicuidesign/magicui (Marquee, NumberTicker,
+   Shimmer, AuroraBackground, ShineBorder)
+   ═══════════════════════════════════════════ */
+
+:root {
+  --card-hilite: rgba(255, 255, 255, 0.6);
+  --ambient-a: rgba(42, 122, 106, 0.13);
+  --ambient-b: rgba(201, 154, 75, 0.14);
+  --ambient-c: rgba(96, 140, 200, 0.10);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --card-hilite: rgba(255, 255, 255, 0.05);
+    --ambient-a: rgba(92, 188, 171, 0.10);
+    --ambient-b: rgba(232, 203, 142, 0.05);
+    --ambient-c: rgba(96, 140, 220, 0.10);
+  }
+}
+html.dark {
+  --card-hilite: rgba(255, 255, 255, 0.05);
+  --ambient-a: rgba(92, 188, 171, 0.10);
+  --ambient-b: rgba(232, 203, 142, 0.05);
+  --ambient-c: rgba(96, 140, 220, 0.10);
+}
+html.light {
+  --card-hilite: rgba(255, 255, 255, 0.6);
+  --ambient-a: rgba(42, 122, 106, 0.13);
+  --ambient-b: rgba(201, 154, 75, 0.14);
+  --ambient-c: rgba(96, 140, 200, 0.10);
+}
+
+/* ── Fondo ambiental aurora ─────────────────── */
+.ui-ambient {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.ui-ambient__blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(64px);
+  will-change: transform;
+}
+.ui-ambient__blob--a {
+  width: 58vmax; height: 58vmax; top: -20vmax; left: -18vmax;
+  background: radial-gradient(circle at 35% 35%, var(--ambient-a), transparent 66%);
+  animation: ui-drift-a 36s ease-in-out infinite alternate;
+}
+.ui-ambient__blob--b {
+  width: 52vmax; height: 52vmax; bottom: -22vmax; right: -18vmax;
+  background: radial-gradient(circle at 60% 40%, var(--ambient-b), transparent 66%);
+  animation: ui-drift-b 30s ease-in-out infinite alternate;
+}
+.ui-ambient__blob--c {
+  width: 44vmax; height: 44vmax; bottom: -10vmax; left: -14vmax;
+  background: radial-gradient(circle at 40% 60%, var(--ambient-c), transparent 66%);
+  animation: ui-drift-c 42s ease-in-out infinite alternate;
+}
+@keyframes ui-drift-a { to { transform: translate3d(7vmax, 5vmax, 0) scale(1.07); } }
+@keyframes ui-drift-b { to { transform: translate3d(-6vmax, -5vmax, 0) scale(1.1); } }
+@keyframes ui-drift-c { to { transform: translate3d(5vmax, -4vmax, 0) scale(0.95); } }
+
+/* ── Cinta bursátil (marquee) ───────────────── */
+.ui-ticker {
+  position: relative;
+  overflow: hidden;
+  max-width: 100vw;
+  margin: 0.15rem 0 0;
+  padding: 0.45rem 0;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+}
+.ui-ticker__track {
+  display: flex;
+  width: max-content;
+  animation: ui-marquee 40s linear infinite;
+}
+.ui-ticker:hover .ui-ticker__track { animation-play-state: paused; }
+.ui-ticker__group {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding-right: 1.5rem;
+}
+.ui-ticker__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+.ui-ticker__flag { font-size: 0.85rem; }
+.ui-ticker__symbol { font-weight: 700; letter-spacing: 0.02em; }
+.ui-ticker__price {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.ui-ticker__chg {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.ui-ticker__chg.is-up { color: var(--success); }
+.ui-ticker__chg.is-down { color: var(--danger); }
+.ui-ticker__arrow { font-size: 0.58rem; }
+@keyframes ui-marquee { to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) {
+  .ui-ticker {
+    overflow-x: auto;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+  .ui-ticker__track { animation: none; width: auto; }
+  .ui-ticker__track > [aria-hidden="true"] { display: none; }
+}
+
+/* ── Esqueletos con brillo (shimmer) ────────── */
+.ui-shimmer {
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--muted) 14%, var(--card));
+}
+.ui-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent,
+    color-mix(in srgb, var(--card) 75%, transparent), transparent);
+  animation: ui-shimmer 1.5s ease-in-out infinite;
+}
+@keyframes ui-shimmer { 100% { transform: translateX(100%); } }
+
+/* ── Destello periódico en tarjetas héroe ───── */
+.ui-shine { position: relative; overflow: hidden; }
+.ui-shine::before {
+  content: "";
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: -70%;
+  width: 45%;
+  transform: skewX(-18deg);
+  background: linear-gradient(90deg, transparent,
+    color-mix(in srgb, #ffffff 30%, transparent), transparent);
+  animation: ui-shine 7s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes ui-shine {
+  0%, 58% { left: -70%; }
+  88%, 100% { left: 135%; }
+}
+
+/* ── Punto "en vivo" con anillo ─────────────── */
+.ui-ping { animation: ui-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite; }
+@keyframes ui-ping {
+  0% { transform: scale(1); opacity: 0.7; }
+  70%, 100% { transform: scale(2.6); opacity: 0; }
+}
+
+/* ── Texto con degradado ────────────────────── */
+.text-gradient {
+  background: linear-gradient(100deg, var(--primary),
+    color-mix(in srgb, var(--primary) 45%, var(--accent-soft)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ── Tarjeta héroe con degradado ────────────── */
+.ui-hero {
+  border: none;
+  color: var(--primary-foreground);
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--primary) 88%, #000 12%),
+    var(--primary) 55%,
+    color-mix(in srgb, var(--primary) 68%, var(--accent-soft)));
+  box-shadow: 0 16px 40px color-mix(in srgb, var(--primary) 30%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+/* ── Encabezados de sección con acento ──────── */
+.ui-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ui-heading::before {
+  content: "";
+  width: 4px;
+  height: 1.1em;
+  border-radius: 99px;
+  background: linear-gradient(180deg, var(--primary), var(--accent-soft));
+}
+
+/* ── Fichas de icono con color y brillo ─────── */
+.ui-tile {
+  --tile: var(--primary);
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 16px;
+  font-size: 1.3rem;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--tile) 82%, #ffffff 18%),
+    color-mix(in srgb, var(--tile) 78%, #000000 10%));
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--tile) 32%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition: transform var(--ui-duration) var(--ui-ease),
+    box-shadow var(--ui-duration) var(--ui-ease);
+}
+.ui-tile--teal { --tile: #2a7a6a; }
+.ui-tile--gold { --tile: #c08c3e; }
+.ui-tile--blue { --tile: #4a7fb5; }
+.ui-tile--plum { --tile: #8a5a83; }
+@media (hover: hover) and (pointer: fine) {
+  a:hover > .ui-tile, button:hover > .ui-tile { transform: translateY(-2px) scale(1.04); }
+}
+
+/* ── Tarjeta de índice con hairline superior ── */
+.ui-idx { position: relative; overflow: hidden; }
+.ui-idx::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary), var(--accent-soft));
+  opacity: 0.85;
+}
+
+/* ── Barra de navegación flotante ───────────── */
+.ui-bottomnav {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 50;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  padding: 0 0.5rem calc(0.7rem + env(safe-area-inset-bottom));
+}
+.ui-bottomnav__bar {
+  pointer-events: auto;
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.4rem;
+  max-width: 100%;
+  border-radius: 30px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--card) 82%, transparent);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  box-shadow: 0 14px 34px color-mix(in srgb, var(--foreground) 16%, transparent),
+    inset 0 1px 0 var(--card-hilite);
+}
+.ui-bottomnav__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 52px;
+  padding: 0.35rem 0.45rem;
+  border-radius: 22px;
+  color: var(--muted);
+  transition: color 0.2s ease;
+}
+.ui-bottomnav__item.is-active {
+  color: var(--primary-foreground);
+  background: linear-gradient(135deg, var(--primary),
+    color-mix(in srgb, var(--primary) 68%, var(--accent-soft)));
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--primary) 35%, transparent);
+  animation: ui-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.ui-bottomnav__icon {
+  font-size: 1.3rem;
+  line-height: 1;
+  transition: transform 0.25s var(--ui-ease);
+}
+.ui-bottomnav__item.is-active .ui-bottomnav__icon {
+  transform: translateY(-1px) scale(1.08);
+}
+.ui-bottomnav__label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+@keyframes ui-pop {
+  0% { transform: scale(0.86); }
+  100% { transform: scale(1); }
+}
+
+/* ── Variantes de ficha de icono ────────────── */
+.ui-tile--sm { width: 36px; height: 36px; border-radius: 12px; font-size: 0.78rem; }
+.ui-tile--md { width: 40px; height: 40px; border-radius: 14px; font-size: 1.05rem; }
+.ui-tile--flat { box-shadow: none; }
+.ui-bottomnav__label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

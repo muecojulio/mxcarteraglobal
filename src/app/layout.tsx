@@ -5,6 +5,7 @@ import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import BottomNav from "@/components/BottomNav";
+import AmbientBackground from "@/components/AmbientBackground";
 import InstallPrompt from "@/components/InstallPrompt";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import ThemeProvider from "@/components/ThemeProvider";
@@ -99,7 +100,8 @@ export default async function RootLayout({
           <AppLock>
           <ServiceWorkerRegister />
           <PersistRoute />
-          <div className="flex-1 flex flex-col pb-28 safe-bottom app-main">
+          <AmbientBackground />
+          <div className="relative z-10 flex-1 flex flex-col pb-28 safe-bottom app-main">
             {children}
           </div>
           <BottomNav />
