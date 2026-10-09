@@ -28,7 +28,10 @@ export function LiveBadge({ status }: { status?: LiveStatus }) {
       }
     >
       {status.mode === "poll" ? (
-        <span className="inline-block w-1.5 h-1.5 rounded-full bg-success mr-1 animate-pulse" />
+        <span className="relative inline-flex w-1.5 h-1.5 mr-1.5 align-middle">
+          <span className="ui-ping absolute inline-flex h-full w-full rounded-full bg-success" />
+          <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-success" />
+        </span>
       ) : null}
       {label}
     </span>
